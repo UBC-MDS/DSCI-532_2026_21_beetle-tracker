@@ -1,4 +1,4 @@
-# Contributing to DSCI-532_2026_21_Dashboard
+# Contributing to DSCI-532_2026_21_beetle-tracker
 
 Thank you for your interest in contributing to the Japanese Beetle — Invasive Species Tracker project. This guide outlines how to propose changes to the project. For questions about the contribution process, please open an issue or contact a core group member.
 
