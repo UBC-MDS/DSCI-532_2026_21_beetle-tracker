@@ -42,6 +42,22 @@ Some notable findings from the dataset exploration included:
 
 These findings confirm that the dataset fully supports the selected user story and can effectively power dashboard features that allow citizen scientists to see their collective impact on Japanese beetle monitoring.
 
+### Visualizations
+
+#### Figure 1: Citizen Science Impact Over Time
+![Temporal Trend](../img/temporal_trend.png)
+
+**What this shows:** Citizen science observations increased from 189 in 2015 to 7,857 in 2023 (4,057% growth), while institutional observations decreased from 157 to 28.
+
+**How this supports decision-making:** By comparing 2015 vs 2023, iNaturalist users can see their collective impact has grown 42x, with a current 280:1 ratio over institutions, validating the need to filter and showcase citizen science contributions.
+
+#### Figure 2: Data Source Breakdown  
+![Basis of Record](../img/basis_of_record.png)
+
+**What this shows:** 94.1% HUMAN_OBSERVATION vs 5.5% PRESERVED_SPECIMEN.
+
+**How this supports decision-making:** The 17:1 ratio confirms filtering by `basisOfRecord` will reliably separate citizen science from institutional data.
+
 
 ## Citations
 
