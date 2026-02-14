@@ -1,6 +1,8 @@
 from shiny import App, ui
 from shinywidgets import render_widget, output_widget
 from ipyleaflet import Map
+import os
+
 
 app_ui = ui.page_fluid(
     ui.tags.style("""
@@ -75,5 +77,8 @@ def server(input, output, session):
     def map():
         return Map(center=(20, 0), zoom=2, layout={"height": "450px"})
 
-
-app = App(app_ui, server)
+app = App(
+    app_ui,
+    server,
+    static_assets=os.path.join(os.path.dirname(__file__), "www")
+)
