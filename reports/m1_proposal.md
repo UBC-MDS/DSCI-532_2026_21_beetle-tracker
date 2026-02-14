@@ -59,6 +59,36 @@ These findings confirm that the dataset fully supports the selected user story a
 **How this supports decision-making:** The 17:1 ratio confirms filtering by `basisOfRecord` will reliably separate citizen science from institutional data.
 
 
+## Section 5: App Sketch & Description
+
+### Sketch
+
+| Sketch 1 | Sketch 2 |
+|:-:|:-:|
+| ![Sketch 1](../img/sketch1.png) | ![Sketch 2](../img/sketch2.png) |
+| *First draft, brainstorming ideas* | *Second draft, more polished* |
+
+### Description
+
+When the user first opens the dashboard, they will see input controls on the left side, and outputs and plots on the right side. The left sidebar will contain filter controls such as date range, region selectors, and basis of record radio buttons. On the right side, the top row will be summary statistics, followed by a large interactive map in the middle, and then several plots and charts at the bottom. The dashboard will be highly reactive and interactive. The user will be able to make changes on the filter controls and see immediate live updates on the right side.
+
+Here are at least 9 components that are planned for the dashboard:
+
+1. Date range slider: Restrict data to use only observations within the date range (default to entire date range)
+2. Region dropdown selector: Restrict data to use only observations within a particular region (default to all regions)
+3. Basis of record radio button: Allow the user to isolate different categories of observations, such as human observations or preserved specimens (default to all)
+4. Value box: Summary stat of total observations (Based on input filters, how many recorded observations are there?)
+5. Value box: Summary stat of first occurrence year (Based on input filters, what year was the first observation?)
+6. Value box: Summary stat of status of invasive species (Based on input filters, is there a current presence of the invasive species?)
+7. Interactive map: The map will show observation density of the invasive species
+8. Time series plot: A plot showing the increasing or decreasing number of observations over time
+9. Distribution plot: A plot showing the distribution of Basis of Record (what percentage of observations are human-observed, etc.)
+
+Based on the above sketches and component descriptions, we have come up with this initial Shiny dashboard skeleton, which can be run by following the Readme instructions on our GitHub page.
+
+![Shiny Skeleton](../img/shiny_skeleton.png)
+*Initial Shiny dashboard skeleton*
+
 ## Citations
 
 Invasive Species Centre. (2024, September 11). Japanese Beetle – Invasive Species Centre. <https://www.invasivespeciescentre.ca/invasive-species/meet-the-species/invasive-insects/japanese-beetle/>
