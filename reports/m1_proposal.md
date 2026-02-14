@@ -21,6 +21,44 @@ As a frequent iNaturalist user, I want to see the impacts of my, and my fellow c
 As someone living abroad, I just found out about the Japanese beetle, and I want to see if it is present near me, and if so, where. I can filter by continent, and manipulate the map, to see occurrences near me.
 As a policy maker in government who is considering funding an awareness campaign in British Columbia, I want to know if the Japanese beetle has been found near my municipality, and if so, when.
 
+## Section 4: Exploratory Data Analysis
+
+A complete EDA can be found in `notebooks/eda_analysis.ipynb`
+
+### Selected User Story
+This EDA focuses on **User Story**: "As a frequent iNaturalist user, I want to see the impacts of my, and my fellow citizen scientists, observations, so I filter observations by basis of record."
+
+### Key Findings
+
+Some notable findings from the dataset exploration included:
+
+1. **Citizen science dominance**: Community scientists contribute 94.1% of all observations (50,419 records), outnumbering institutional collections by 17:1. This confirms that filtering by `basisOfRecord` will effectively highlight citizen science impact.
+
+2. **Explosive growth trend**: Citizen science observations increased 4,057% from 2015 to 2023 (189 → 7,857 records), while institutional contributions decreased (157 → 28). This dramatic growth validates the importance of showcasing citizen scientist contributions over time.
+
+3. **Data quality for filtering**: The `basisOfRecord` field is 99.9% populated with clear distinction between HUMAN_OBSERVATION and PRESERVED_SPECIMEN categories, making it reliable for dashboard filtering functionality.
+
+4. **iNaturalist as primary source**: 93.1% of all observations come specifically from iNaturalist (49,878 records), demonstrating that the platform is the dominant data source and confirming the relevance of this user story.
+
+These findings confirm that the dataset fully supports the selected user story and can effectively power dashboard features that allow citizen scientists to see their collective impact on Japanese beetle monitoring.
+
+### Visualizations
+
+#### Figure 1: Citizen Science Impact Over Time
+![Temporal Trend](../img/temporal_trend.png)
+
+**What this shows:** Citizen science observations increased from 189 in 2015 to 7,857 in 2023 (4,057% growth), while institutional observations decreased from 157 to 28.
+
+**How this supports decision-making:** By comparing 2015 vs 2023, iNaturalist users can see their collective impact has grown 42x, with a current 280:1 ratio over institutions, validating the need to filter and showcase citizen science contributions.
+
+#### Figure 2: Data Source Breakdown  
+![Basis of Record](../img/basis_of_record.png)
+
+**What this shows:** 94.1% HUMAN_OBSERVATION vs 5.5% PRESERVED_SPECIMEN.
+
+**How this supports decision-making:** The 17:1 ratio confirms filtering by `basisOfRecord` will reliably separate citizen science from institutional data.
+
+
 ## Citations
 
 Invasive Species Centre. (2024, September 11). Japanese Beetle – Invasive Species Centre. <https://www.invasivespeciescentre.ca/invasive-species/meet-the-species/invasive-insects/japanese-beetle/>
