@@ -2,14 +2,18 @@ name: 'dsci532'
 channels:
   - conda-forge
 dependencies:
-  - numpy
-  - plotly
-  - matplotlib
-  - pandas
-  - python
   - ipykernel
-  - seaborn
+  - ipyleaflet
+  - matplotlib
+  - nbformat
+  - numpy
+  - pandas
+  - pip
+  - plotly
+  - python=3.12
   - scienceplots
   - scikit-learn
-  - nbformat
-  - shiny
+  - seaborn
+  - pip:
+    - shiny
+    - shinywidgets
