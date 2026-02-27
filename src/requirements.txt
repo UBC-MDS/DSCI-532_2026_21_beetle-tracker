@@ -3,3 +3,4 @@ shinywidgets
 pandas
 ipyleaflet
 matplotlib
+altair
