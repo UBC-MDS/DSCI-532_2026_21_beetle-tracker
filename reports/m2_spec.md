@@ -8,8 +8,8 @@
 | 2   | When I … I want to … so I can … |  |                               |
 | 3   | When I want to know which organizations or individuals contribute the most beetle records, I want to see a ranked bar chart of top rights holders, so I can identify the key contributors to the dataset. | Implemented |  |
 | 4   | When I want to plan pest control or fieldwork, I want to see which months have the highest beetle activity, so I can time my interventions or observations effectively. | Implemented | |
-| 5   | When I … I want to … so I can … |  |                               |
-| 6   | When I … I want to … so I can … |  |                               |
+| 5   | When I am assessing risk and developing prevention methods, I want to see the spread of the beetle from first observation to a widespread established population so I can plean when prevention strategies should be implemented.| implemented |                               |
+| 6   | When I am curious about what regions are at risk, I want to visualize on the map along what latitudes infestations are present so I can assess if my region is at risk. | implemented |                               |
 | 7   | When I … I want to … so I can … |  |                               |
 | 8   | When I … I want to … so I can … |  |                               |
 
@@ -23,13 +23,10 @@
 | `plot_rights_holder`   | Output | `render_altair` | `input_year`, `input_region`, `input_basis_record` | #3 |
 | `plot_monthly`         | Output | `render_altair` | `input_year`, `input_region`, `input_basis_record` | #4 |
 
-
 ---
 
 ## 2.3 Reactivity Diagram
 
-
 ---
 
 ## 2.4 Calculation Details
-
