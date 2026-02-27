@@ -1,9 +1,10 @@
 from shiny import App, ui, reactive, render
-from shinywidgets import render_widget, output_widget
+from shinywidgets import render_widget, output_widget, render_altair
 from ipyleaflet import Map
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+import altair as alt
 
 # Load the dataset once at startup; all reactive outputs read from this shared dataframe
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "gbif-beetle.csv")
@@ -69,12 +70,12 @@ app_ui = ui.page_fluid(
         ui.layout_columns(
             ui.card(
                 ui.card_header("Occurrences Over Time"),
-                ui.output_plot("plot_timeseries"),
+                output_widget("plot_timeseries"),
                 full_screen=True,
             ),
             ui.card(
                 ui.card_header("Basis of Record"),
-                ui.output_plot("plot_basis"),
+                output_widget("plot_basis"),
                 full_screen=True,
             ),
             col_widths=[6, 6],
@@ -118,7 +119,7 @@ def server(input, output, session):
         return ui.value_box(f"Status in Region as of {year_max}", value)
 
     # Line chart: number of observations per year across the filtered dataset
-    @render.plot
+    @render_altair
     def plot_timeseries():
         counts = (
             filtered_df()
@@ -126,38 +127,60 @@ def server(input, output, session):
             .size()
             .reset_index(name="count")
         )
-        fig, ax = plt.subplots()
-        ax.plot(counts["year"], counts["count"])
-        ax.set_xlabel("Year")
-        ax.set_ylabel("Observations")
-        return fig
+        chart = alt.Chart(counts).mark_line().encode(
+            x=alt.X("year:Q", title="Year", axis=alt.Axis(tickCount=6, format="d")),
+            y=alt.Y("count:Q", title="Observations"),
+            tooltip=["year", "count"]
+        ).properties(
+            width="container",
+            height=300
+        )
+        return chart
 
     # Pie chart: share of each basisOfRecord category in the filtered dataset
-    @render.plot
+    @render_altair
     def plot_basis():
-        counts = filtered_df()["basisOfRecord"].value_counts()
-        fig, ax = plt.subplots(figsize=(7, 7))
+        counts = (
+            filtered_df()["basisOfRecord"]
+            .value_counts()
+            .reset_index()
+        )
+        counts.columns = ["basisOfRecord", "count"]
         
-        wedges, texts, autotexts = ax.pie(
-            counts,
-            autopct=lambda p: f"{p:.1f}%" if p > 2 else "",
-            pctdistance=0.75,
-            startangle=90,
-            wedgeprops={"edgecolor": "white", "linewidth": 1}
+        chart = alt.Chart(counts).mark_arc().encode(
+            theta=alt.Theta("count:Q"),
+            color=alt.Color("basisOfRecord:N", legend=alt.Legend(title="Basis of Record")),
+            tooltip=["basisOfRecord", "count"]
+        ).properties(
+            width="container",
+            height=350
+        )
+        return chart
+    
+    # Interactive line chart with points and tooltips
+    @render_altair
+    def plot_timeseries():
+        counts = (
+            filtered_df()
+            .groupby("year")
+            .size()
+            .reset_index(name="count")
         )
         
-        ax.legend(
-            wedges,
-            [f"{label} ({val:,})" for label, val in zip(counts.index, counts.values)],
-            title="Basis of Record",
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.08),  
-            ncol=2,
-            fontsize=9
+        nearest = alt.selection_point(nearest=True, on="mouseover", fields=["year"], empty=False)
+        
+        line = alt.Chart(counts).mark_line().encode(
+            x=alt.X("year:Q", title="Year", axis=alt.Axis(tickCount=6, format="d")),
+            y=alt.Y("count:Q", title="Observations"),
         )
         
-        fig.subplots_adjust(bottom=0.2)  
-        return fig
+        points = line.mark_point().encode(
+            opacity=alt.condition(nearest, alt.value(1), alt.value(0)),
+            tooltip=["year:Q", "count:Q"]
+        ).add_params(nearest)
+        
+        chart = (line + points).properties(width="container", height=300)
+        return chart
 
     # Static map centered on the world; will be made reactive in a future milestone
     @render_widget
