@@ -23,13 +23,14 @@
 | `plot_rights_holder`   | Output | `render_altair` | `input_year`, `input_region`, `input_basis_record` | #3 |
 | `plot_monthly`         | Output | `render_altair` | `input_year`, `input_region`, `input_basis_record` | #4 |
 
-
 ---
 
 ## 2.3 Reactivity Diagram
-
 
 ---
 
 ## 2.4 Calculation Details
 
+## Complexity Enhancement
+
+Reset button which resets all filters back to original (none). This button will improve user experience by simplifying the resetting process, allowing them to make more queries faster.
