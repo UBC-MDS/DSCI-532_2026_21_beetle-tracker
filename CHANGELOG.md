@@ -1,7 +1,17 @@
-## Added
+# Change Log
 
-## Changed
+## 0.2.0
 
-## Fixed
+### Added
 
-## Known Issues
+#### Reset Button
+
+This button on the dash board will reset all inputs to original.
+
+### Changed
+
+### Fixed
+
+### Known Issues
+
+### Reflection
