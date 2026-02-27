@@ -136,8 +136,27 @@ def server(input, output, session):
     @render.plot
     def plot_basis():
         counts = filtered_df()["basisOfRecord"].value_counts()
-        fig, ax = plt.subplots()
-        ax.pie(counts, labels=counts.index, autopct="%1.1f%%")
+        fig, ax = plt.subplots(figsize=(7, 7))
+        
+        wedges, texts, autotexts = ax.pie(
+            counts,
+            autopct=lambda p: f"{p:.1f}%" if p > 2 else "",
+            pctdistance=0.75,
+            startangle=90,
+            wedgeprops={"edgecolor": "white", "linewidth": 1}
+        )
+        
+        ax.legend(
+            wedges,
+            [f"{label} ({val:,})" for label, val in zip(counts.index, counts.values)],
+            title="Basis of Record",
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.08),  
+            ncol=2,
+            fontsize=9
+        )
+        
+        fig.subplots_adjust(bottom=0.2)  
         return fig
 
     # Static map centered on the world; will be made reactive in a future milestone
