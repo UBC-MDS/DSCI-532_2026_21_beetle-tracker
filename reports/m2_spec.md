@@ -6,8 +6,8 @@
 | --- | ------------------------------- | -------------- | ----------------------------- |
 | 1   | When I want to know how many observations are in a time frame, I want to be able to select a start and end year, so I can see the total observations in a value box. | Implemented |                               |
 | 2   | When I … I want to … so I can … |  |                               |
-| 3   | When I … I want to … so I can … |  |                               |
-| 4   | When I … I want to … so I can … |  |                               |
+| 3   | When I want to know which organizations or individuals contribute the most beetle records, I want to see a ranked bar chart of top rights holders, so I can identify the key contributors to the dataset. | Implemented |  |
+| 4   | When I want to plan pest control or fieldwork, I want to see which months have the highest beetle activity, so I can time my interventions or observations effectively. | Implemented | |
 | 5   | When I … I want to … so I can … |  |                               |
 | 6   | When I … I want to … so I can … |  |                               |
 | 7   | When I … I want to … so I can … |  |                               |
@@ -19,7 +19,9 @@
 
 | ID            | Type          | Shiny widget / renderer | Depends on                   | Job story  |
 | ------------- | ------------- | ----------------------- | ---------------------------- | ---------- |
-| `input_year`  | Input         | `ui.input_slider()`     | —                            | #1     |
+| `input_year`  | Input         | `ui.input_slider()`     | —                            | #1         |
+| `plot_rights_holder`   | Output | `render_altair` | `input_year`, `input_region`, `input_basis_record` | #3 |
+| `plot_monthly`         | Output | `render_altair` | `input_year`, `input_region`, `input_basis_record` | #4 |
 
 
 ---
