@@ -1,6 +1,9 @@
 from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget, render_altair
-from ipyleaflet import Map
+from ipyleaflet import Map, basemaps, GeoJSON, LegendControl
+import h3
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import pandas as pd
 import os
 import altair as alt
@@ -16,6 +19,15 @@ YEAR_MAX = int(df["year"].max())
 # Dropdown/radio choices derived from the data
 REGIONS = ["All"] + sorted(df["countryCode"].dropna().unique().tolist())
 BASIS_OF_RECORD = ["All"] + sorted(df["basisOfRecord"].dropna().unique().tolist())
+
+# Available map underlays; keys are displayed in the sidebar dropdown
+BASEMAP_OPTIONS = {
+    "CartoDB Positron": basemaps.CartoDB.Positron,       # clean light gray, minimal labels
+    "CartoDB Dark Matter": basemaps.CartoDB.DarkMatter,  # dark version of Positron
+    "Esri Gray Canvas": basemaps.Esri.WorldGrayCanvas,   # very minimal, nearly label-free
+    "Esri Topo": basemaps.Esri.WorldTopoMap,             # terrain and topographic detail
+    "Satellite": basemaps.Esri.WorldImagery,             # aerial/satellite imagery
+}
 
 app_ui = ui.page_fluid(
     ui.tags.style("""
@@ -48,7 +60,20 @@ app_ui = ui.page_fluid(
                 choices=BASIS_OF_RECORD,
                 selected="All",
             ),
+            ui.input_select(
+                id="basemap",
+                label="Map Underlay",
+                choices=list(BASEMAP_OPTIONS.keys()),
+                selected="Esri Gray Canvas",
+            ),
+            ui.input_select(
+                id="colormap",
+                label="Map Color Scale",
+                choices=["viridis", "plasma", "YlOrRd", "Greens", "Blues"],
+                selected="plasma",
+            ),
             open="desktop",
+            width=300,
         ),
         # Summary row
         ui.layout_columns(
@@ -232,10 +257,78 @@ def server(input, output, session):
         return chart
         
     
-    # Static map centered on the world; will be made reactive in a future milestone
+    # This map was coded with Claude's assistance. Claude suggested:
+    #  - Use H3 hexagonal binning over ipyleaflet's built-in Heatmap layer
+    #  - H3 provies the hexagon shapes
+    #  - We hand the shapes over to pyleaflet (no longer using heatmap)
+    #  - Use ipyleaflet's LegendControl to add an on-map legend
+    #  - GeoJSON used to represent hexagon shapes, which pyleaflet understands
+    # Map with H3 hex bins showing observation density.
+    # Reactively redraws whenever any sidebar filter or display option changes
     @render_widget
     def map():
-        return Map(center=(20, 0), zoom=2, layout={"height": "450px"})
+        # Base map tile layer is selected by the user via the sidebar dropdown
+        m = Map(center=(20, 0),
+                zoom=2,
+                basemap=BASEMAP_OPTIONS[input.basemap()],
+                layout={"height": "450px"})
+
+        # Drop rows with missing coordinates and clamp to valid lat/lon ranges
+        pts = filtered_df()[["decimalLatitude", "decimalLongitude"]].dropna()
+        pts = pts[pts["decimalLatitude"].between(-90, 90) & pts["decimalLongitude"].between(-180, 180)]
+
+        # Return a plain empty map if the current filter selection has no data
+        if pts.empty:
+            return m
+
+        # --- H3 hexagonal binning ---
+        # Each point is assigned to an H3 cell at resolution 3 (approx. 12,000 km squared per cell).
+        # Resolution 3 gives a good balance between granularity and readability at world zoom.
+        cells = [h3.latlng_to_cell(lat, lng, 3)
+                 for lat, lng in zip(pts["decimalLatitude"], pts["decimalLongitude"])]
+        
+        # Count observations per cell; most-frequent cells will receive the darkest color
+        counts = pd.Series(cells).value_counts()
+
+        # Colormap is selected by the user; count is normalised to [0, 1] against the max
+        cmap = cm.get_cmap(input.colormap())
+        max_count = counts.max()
+
+        # Build a GeoJSON feature for each occupied cell
+        features = []
+        for cell, count in counts.items():
+            # h3.cell_to_boundary returns vertices as (lat, lng); GeoJSON expects [lng, lat]
+            boundary = h3.cell_to_boundary(cell)
+            coords = [[lng, lat] for lat, lng in boundary]
+            coords.append(coords[0])  # close the polygon ring
+            color = mcolors.to_hex(cmap(count / max_count))
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [coords]},
+                "properties": {"style": {
+                    "color": color,       # border color
+                    "fillColor": color,   # fill color
+                    "fillOpacity": 0.7,
+                    "weight": 0.3,        # border thickness
+                }},
+            })
+
+        # Add the hex bin layer; style_callback applies the per-feature color stored above
+        m.add_layer(GeoJSON(
+            data={"type": "FeatureCollection", "features": features},
+            style_callback=lambda f: f["properties"]["style"],
+        ))
+
+        # --- Legend ---
+        # 5 evenly-spaced steps spanning the actual count range in the current filtered data
+        legend_steps = ["Very Low", "Low", "Medium", "High", "Very High"]
+        legend_colors = {
+            f"{label} ({max(1, round(max_count * i / 4)):,})": mcolors.to_hex(cmap(i / 4))
+            for i, label in enumerate(legend_steps)
+        }
+        m.add_control(LegendControl(legend_colors, title="Observations", position="bottomright"))
+
+        return m
 
 app = App(
     app_ui,
