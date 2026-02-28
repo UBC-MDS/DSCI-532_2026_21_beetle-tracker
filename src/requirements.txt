@@ -4,3 +4,4 @@ pandas
 ipyleaflet
 matplotlib
 altair
+h3
