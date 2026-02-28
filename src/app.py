@@ -1,9 +1,9 @@
 from shiny import App, ui, reactive, render
-from shinywidgets import render_widget, output_widget
+from shinywidgets import render_widget, output_widget, render_altair
 from ipyleaflet import Map
 import pandas as pd
-import matplotlib.pyplot as plt
 import os
+import altair as alt
 
 # Load the dataset once at startup; all reactive outputs read from this shared dataframe
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "gbif-beetle.csv")
@@ -66,19 +66,38 @@ app_ui = ui.page_fluid(
             open=True,
         ),
         # Bottom row
-        ui.layout_columns(
-            ui.card(
-                ui.card_header("Occurrences Over Time"),
-                ui.output_plot("plot_timeseries"),
-                full_screen=True,
+        ui.accordion(
+        ui.accordion_panel(
+            "Observation Charts",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Occurrences Over Time"),
+                    output_widget("plot_timeseries"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Basis of Record"),
+                    output_widget("plot_basis"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
             ),
-            ui.card(
-                ui.card_header("Basis of Record"),
-                ui.output_plot("plot_basis"),
-                full_screen=True,
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Top Rights Holders"),
+                    output_widget("plot_rights_holder"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Seasonal Observations by Month"),
+                    output_widget("plot_monthly"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
             ),
-            col_widths=[6, 6],
         ),
+    open=True,
+),
     ),
 )
 
@@ -118,7 +137,7 @@ def server(input, output, session):
         return ui.value_box(f"Status in Region as of {year_max}", value)
 
     # Line chart: number of observations per year across the filtered dataset
-    @render.plot
+    @render_altair
     def plot_timeseries():
         counts = (
             filtered_df()
@@ -126,20 +145,93 @@ def server(input, output, session):
             .size()
             .reset_index(name="count")
         )
-        fig, ax = plt.subplots()
-        ax.plot(counts["year"], counts["count"])
-        ax.set_xlabel("Year")
-        ax.set_ylabel("Observations")
-        return fig
+        
+        nearest = alt.selection_point(nearest=True, on="mouseover", fields=["year"], empty=False)
+        
+        line = alt.Chart(counts).mark_line().encode(
+            x=alt.X("year:Q", title="Year", axis=alt.Axis(tickCount=6, format="d")),
+            y=alt.Y("count:Q", title="Observations"),
+        )
+        
+        points = line.mark_point().encode(
+            opacity=alt.condition(nearest, alt.value(1), alt.value(0)),
+            tooltip=["year:Q", "count:Q"]
+        ).add_params(nearest)
+        
+        chart = (line + points).properties(width="container", height=300)
+        return chart
+
 
     # Pie chart: share of each basisOfRecord category in the filtered dataset
-    @render.plot
+    @render_altair
     def plot_basis():
-        counts = filtered_df()["basisOfRecord"].value_counts()
-        fig, ax = plt.subplots()
-        ax.pie(counts, labels=counts.index, autopct="%1.1f%%")
-        return fig
-
+        counts = (
+            filtered_df()["basisOfRecord"]
+            .value_counts()
+            .reset_index()
+        )
+        counts.columns = ["basisOfRecord", "count"]
+        
+        chart = alt.Chart(counts).mark_arc().encode(
+            theta=alt.Theta("count:Q"),
+            color=alt.Color("basisOfRecord:N", legend=alt.Legend(title="Basis of Record")),
+            tooltip=["basisOfRecord", "count"]
+        ).properties(
+            width="container",
+            height=350
+        )
+        return chart
+    
+    # Bar chart: top 10 rights holders
+    @render_altair
+    def plot_rights_holder():
+        counts = (
+            filtered_df()["rightsHolder"]
+            .dropna()
+            .value_counts()
+            .head(10)
+            .reset_index()
+        )
+        counts.columns = ["rightsHolder", "count"]
+        
+        chart = alt.Chart(counts).mark_bar().encode(
+            x=alt.X("count:Q", title="Observations"),
+            y=alt.Y("rightsHolder:N", sort="-x", title="Rights Holder"),
+            tooltip=["rightsHolder", "count"]
+        ).properties(
+            width="container",
+            height=300
+        )
+        return chart
+    
+    # Bar chart: observations by month
+    @render_altair
+    def plot_monthly():
+        monthly = (
+            filtered_df()
+            .assign(month=pd.to_datetime(filtered_df()["eventDate"], errors="coerce").dt.month)
+            .dropna(subset=["month"])
+            .groupby("month")
+            .size()
+            .reset_index(name="count")
+        )
+        monthly["month"] = monthly["month"].astype(int)
+        
+        month_names = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",
+                    7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+        monthly["month_name"] = monthly["month"].map(month_names)
+        
+        chart = alt.Chart(monthly).mark_bar().encode(
+            x=alt.X("month:O", title="Month", axis=alt.Axis(labelExpr="{'1':'Jan','2':'Feb','3':'Mar','4':'Apr','5':'May','6':'Jun','7':'Jul','8':'Aug','9':'Sep','10':'Oct','11':'Nov','12':'Dec'}[datum.label]")),
+            y=alt.Y("count:Q", title="Observations"),
+            tooltip=["month_name", "count"]
+        ).properties(
+            width="container",
+            height=300
+        )
+        return chart
+        
+    
     # Static map centered on the world; will be made reactive in a future milestone
     @render_widget
     def map():
