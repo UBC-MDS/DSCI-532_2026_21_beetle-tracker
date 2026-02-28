@@ -81,3 +81,7 @@ flowchart TD
 **Transformation:** Filters the full dataset (`df`) to rows whose `year` falls within the selected range (inclusive). If `region` is not `"All"`, further restricts to rows where `countryCode` matches the selection. If `basis_record` is not `"All"`, further restricts to rows where `basisOfRecord` matches the selection. Returns the resulting subset as a DataFrame.
 
 **Outputs that consume it:** `vb_total_obs`, `vb_first_recorded`, `vb_status`, `map`, `plot_timeseries`, `plot_basis`, `plot_rights_holder`, `plot_monthly` (every output in the app).
+
+## Complexity Enhancement
+
+Reset button which resets all filters back to original (none). This button will improve user experience by simplifying the resetting process, allowing them to make more queries faster.
