@@ -320,6 +320,7 @@ def server(input, output, session):
         # --- H3 hexagonal binning ---
         # Each point is assigned to an H3 cell at resolution 3 (approx. 12,000 km squared per cell).
         # Resolution 3 gives a good balance between granularity and readability at world zoom.
+        # TODO: Make the resolution adaptive to zoom level
         cells = [h3.latlng_to_cell(lat, lng, 3)
                  for lat, lng in zip(pts["decimalLatitude"], pts["decimalLongitude"])]
         
