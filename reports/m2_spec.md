@@ -30,3 +30,7 @@
 ---
 
 ## 2.4 Calculation Details
+
+## Complexity Enhancement
+
+Reset button which resets all filters back to original (none). This button will improve user experience by simplifying the resetting process, allowing them to make more queries faster.
