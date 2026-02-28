@@ -69,6 +69,7 @@ app_ui = ui.page_fluid(
                 id="reset_btn",
                 label="Reset Filters",
                 class_="btn-warning w-100 mt-2",
+            ),
             ui.input_select(
                 id="basemap",
                 label="Map Underlay",
