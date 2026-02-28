@@ -18,3 +18,4 @@ dependencies:
     - shiny
     - shinywidgets
     - altair
+    - h3
