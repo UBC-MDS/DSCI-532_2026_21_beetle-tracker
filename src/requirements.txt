@@ -1,6 +1,7 @@
 shiny
 shinywidgets
 pandas
+numpy
 ipyleaflet
 matplotlib
 altair
