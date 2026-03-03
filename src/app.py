@@ -2,6 +2,7 @@ from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget, render_altair
 from ipyleaflet import Map, basemaps, GeoJSON, LegendControl
 import h3
+import numpy as np
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import pandas as pd
@@ -318,11 +319,12 @@ def server(input, output, session):
             return m
 
         # --- H3 hexagonal binning ---
-        # Each point is assigned to an H3 cell at resolution 3 (approx. 12,000 km squared per cell).
-        # Resolution 3 gives a good balance between granularity and readability at world zoom.
-        # TODO: Make the resolution adaptive to zoom level
-        cells = [h3.latlng_to_cell(lat, lng, 3)
-                 for lat, lng in zip(pts["decimalLatitude"], pts["decimalLongitude"])]
+        # Resolution adapts to the number of points so the GeoJSON payload stays manageable:
+        # large datasets use resolution 2 (~5,882 global cells) to avoid browser timeouts,
+        # while smaller datasets use resolution 3 (~41,163 cells) for finer detail.
+        resolution = 2 if len(pts) > 5_000 else 3
+        latlng_to_cell = np.vectorize(lambda lat, lng: h3.latlng_to_cell(lat, lng, resolution))
+        cells = latlng_to_cell(pts["decimalLatitude"].values, pts["decimalLongitude"].values)
         
         # Count observations per cell; most-frequent cells will receive the darkest color
         counts = pd.Series(cells).value_counts()
