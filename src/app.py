@@ -249,7 +249,7 @@ def server(input, output, session):
             filtered_df()
             .assign(
                 month=pd.to_datetime(
-                    filtered_df()["eventDate"], errors="coerce"
+                    filtered_df()["eventDate"], errors="coerce", utc=True
                 ).dt.month
             )
             .dropna(subset=["month"])
