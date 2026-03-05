@@ -1,5 +1,7 @@
 from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget, render_altair
+from querychat import QueryChat
+from chatlas import ChatAnthropic, ChatOllama
 from ipyleaflet import Map, basemaps, GeoJSON, LegendControl
 import h3
 import numpy as np
@@ -8,6 +10,9 @@ import matplotlib.colors as mcolors
 import pandas as pd
 import os
 import altair as alt
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # Load the dataset once at startup; all reactive outputs read from this shared dataframe
 DATA_PATH = os.path.join(
@@ -32,18 +37,23 @@ BASEMAP_OPTIONS = {
     "Satellite": basemaps.Esri.WorldImagery,             # aerial/satellite imagery
 }
 
-app_ui = ui.page_fluid(
-    ui.tags.style(
-        """
-        body { background-color: #e8f5e9; }
-        .sidebar { background-color: #c8e6c9; }
-        .card { background-color: #f1f8e9; }
-        .card-header { background-color: #a5d6a7; color: #1b5e20; }
-        .value-box { background-color: #c8e6c9 !important; }
-    """
-    ),
-    ui.panel_title("Japanese Beetle Tracker"),
-    ui.layout_sidebar(
+# Use Anthropic when deployed (API key set via environment variable or .env),
+# fall back to a local Ollama model for development without an API key.
+# Set LOCAL_LLM=true in .env to force Ollama even when the API key is present.
+if os.environ.get("LOCAL_LLM", "").lower() == "true":
+    _chat_client = ChatOllama("qwen3:latest")
+elif os.environ.get("ANTHROPIC_API_KEY"):
+    _chat_client = ChatAnthropic(model="claude-haiku-4-5-20251001")
+else:
+    _chat_client = ChatOllama("qwen3:latest")
+
+_greeting = open(os.path.join(os.path.dirname(__file__), "greeting.md")).read()
+qc = QueryChat(df, "beetles", client=_chat_client, greeting=_greeting)
+
+app_ui = ui.page_navbar(
+    ui.nav_panel(
+        "Dashboard",
+        ui.layout_sidebar(
         ui.sidebar(
             ui.input_slider(
                 id="year_range",
@@ -135,10 +145,38 @@ app_ui = ui.page_fluid(
             open=True,
         ),
     ),
+    ),
+    ui.nav_panel(
+        "AI Explorer",
+        ui.layout_sidebar(
+            qc.sidebar(),
+            ui.card(
+                ui.card_header("Filtered Data"),
+                ui.output_data_frame("ai_table"),
+                full_screen=True,
+            ),
+        ),
+    ),
+    title="Japanese Beetle Tracker",
+    header=ui.tags.style(
+        """
+        body { background-color: #e8f5e9; }
+        .sidebar { background-color: #c8e6c9; }
+        .card { background-color: #f1f8e9; }
+        .card-header { background-color: #a5d6a7; color: #1b5e20; }
+        .value-box { background-color: #c8e6c9 !important; }
+    """
+    ),
 )
 
 
 def server(input, output, session):
+    sv = qc.server()
+
+    @render.data_frame
+    def ai_table():
+        return sv.df()
+
     # Shared reactive dataframe: filters the full dataset by year range, region, and basis of record.
     # All outputs consume this so each input change triggers one recomputation (not one per output)
     @reactive.calc
@@ -249,7 +287,7 @@ def server(input, output, session):
             filtered_df()
             .assign(
                 month=pd.to_datetime(
-                    filtered_df()["eventDate"], errors="coerce", utc=True
+                    filtered_df()["eventDate"], errors="coerce", utc=True, format="mixed"
                 ).dt.month
             )
             .dropna(subset=["month"])
