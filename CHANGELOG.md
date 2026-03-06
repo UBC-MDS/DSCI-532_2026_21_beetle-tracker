@@ -38,6 +38,7 @@ Optimised map loading to prevent the map from graying out under certain renderin
 ## 0.2.0
 
 ### Added
+* Added a CSV download button to the AI Explorer page that downloads the QueryChat-filtered dataframe (`#64`).
 
 #### Reset Button
 

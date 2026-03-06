@@ -12,6 +12,10 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 [Preview](https://019c9188-e172-6a48-02c5-6482db896430.share.connect.posit.cloud)
 
+## Demo
+
+![Dashboard demo](img/demo.gif)
+
 ## Running the App Locally
 
 ### 1. Clone the repository
