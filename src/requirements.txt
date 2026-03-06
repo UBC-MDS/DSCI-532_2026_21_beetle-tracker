@@ -3,6 +3,7 @@ shinywidgets
 pandas
 numpy
 ipyleaflet
+ipywidgets
 matplotlib
 altair
 h3
