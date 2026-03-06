@@ -6,3 +6,7 @@ ipyleaflet
 matplotlib
 altair
 h3
+querychat
+anthropic
+chatlas
+python-dotenv
