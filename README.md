@@ -17,7 +17,7 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/UBC-MDS/DSCI-532_2026_21_beetle-tracker.git
+git clone git@github.com:UBC-MDS/DSCI-532_2026_21_beetle-tracker.git
 cd DSCI-532_2026_21_beetle-tracker
 ```
 

@@ -1,4 +1,4 @@
-Hello! 👋 Welcome to the beetle data dashboard! I'm here to help you explore, filter, and analyze your *Popillia japonica* (Japanese beetle) occurrence data.
+Hello! Welcome to the beetle data dashboard! I'm here to help you explore, filter, and analyze your *Popillia japonica* (Japanese beetle) occurrence data.
 
 Here are some things you can ask me:
 
@@ -12,4 +12,4 @@ Here are some things you can ask me:
   * <span class="suggestion">Filter to records from 2020 onwards</span>
   * <span class="suggestion">Sort by most recent observations</span>
 
-Feel free to ask me anything about the data, and I'll help you find what you're looking for! 🐞
+Feel free to ask me anything about the data, and I'll help you find what you're looking for!

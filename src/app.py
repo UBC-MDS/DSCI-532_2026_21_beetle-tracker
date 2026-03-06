@@ -41,15 +41,19 @@ BASEMAP_OPTIONS = {
 # Client selection priority:
 #   1. GITHUB_PAT        -> GitHub Models (gpt-4o-mini)
 #   2. ANTHROPIC_API_KEY -> Anthropic (claude-haiku)
-if os.environ.get("GITHUB_PAT"):
-    _chat_client = ChatGithub(model="gpt-4o-mini")
-elif os.environ.get("ANTHROPIC_API_KEY"):
-    _chat_client = ChatAnthropic(model="claude-haiku-4-5-20251001")
-else:
-    raise RuntimeError("No LLM API key found. Set GITHUB_PAT or ANTHROPIC_API_KEY in your .env file.")
+_chat_client = None
+try:
+    if os.environ.get("GITHUB_PAT"):
+        _chat_client = ChatGithub(model="gpt-4o-mini")
+    elif os.environ.get("ANTHROPIC_API_KEY"):
+        _chat_client = ChatAnthropic(model="claude-haiku-4-5-20251001")
+    else:
+        print("Warning: No LLM API key found. Set GITHUB_PAT or ANTHROPIC_API_KEY in .env to enable AI Explorer.")
+except Exception as e:
+    print(f"Warning: Could not initialize AI client ({e}). AI Explorer will be disabled.")
 
 _greeting = open(os.path.join(os.path.dirname(__file__), "greeting.md")).read()
-qc = QueryChat(df, "beetles", client=_chat_client, greeting=_greeting)
+qc = QueryChat(df, "beetles", client=_chat_client, greeting=_greeting) if _chat_client is not None else None
 
 app_ui = ui.page_navbar(
     ui.nav_panel(
@@ -150,10 +154,16 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "AI Explorer",
         ui.layout_sidebar(
-            qc.sidebar(),
+            qc.sidebar() if qc is not None else ui.sidebar(
+                ui.p(
+                    "AI Explorer is disabled. Set GITHUB_PAT or ANTHROPIC_API_KEY "
+                    "in your .env file and restart the app to enable it.",
+                    style="color: #b71c1c;",
+                )
+            ),
             ui.card(
                 ui.card_header("Filtered Data"),
-                ui.output_data_frame("ai_table"),
+                ui.output_data_frame("ai_table") if qc is not None else ui.p(""),
                 full_screen=True,
             ),
         ),
@@ -172,11 +182,12 @@ app_ui = ui.page_navbar(
 
 
 def server(input, output, session):
-    sv = qc.server()
+    if qc is not None:
+        sv = qc.server()
 
-    @render.data_frame
-    def ai_table():
-        return sv.df()
+        @render.data_frame
+        def ai_table():
+            return sv.df()
 
     # Shared reactive dataframe: filters the full dataset by year range, region, and basis of record.
     # All outputs consume this so each input change triggers one recomputation (not one per output)
