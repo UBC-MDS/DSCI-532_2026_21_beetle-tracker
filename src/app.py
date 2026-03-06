@@ -11,6 +11,7 @@ import pandas as pd
 import os
 import altair as alt
 from dotenv import load_dotenv
+import io
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -151,12 +152,22 @@ app_ui = ui.page_navbar(
         ui.layout_sidebar(
             qc.sidebar(),
             ui.card(
-                ui.card_header("Filtered Data"),
+                ui.card_header(
+                    ui.div(
+                        "Filtered Data",
+                        ui.download_button(
+                            "download_csv",
+                            "Download CSV",
+                            class_="btn-success btn-sm",
+                        ),
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%;",
+                    ),
+                ),
                 ui.output_data_frame("ai_table"),
                 full_screen=True,
             ),
         ),
-    ),
+    ),  # closes ui.nav_panel("AI Explorer")
     title="Japanese Beetle Tracker",
     header=ui.tags.style(
         """
@@ -167,7 +178,7 @@ app_ui = ui.page_navbar(
         .value-box { background-color: #c8e6c9 !important; }
     """
     ),
-)
+)  
 
 
 def server(input, output, session):
@@ -415,5 +426,10 @@ def server(input, output, session):
         ui.update_selectize("region", selected="All")
         ui.update_radio_buttons("basis_record", selected="All")
 
+    @render.download(filename="beetle_data.csv")
+    def download_csv():
+        with io.StringIO() as buf:
+            sv.df().to_csv(buf, index=False)
+            yield buf.getvalue()
 
 app = App(app_ui, server, static_assets=os.path.join(os.path.dirname(__file__), "www"))
