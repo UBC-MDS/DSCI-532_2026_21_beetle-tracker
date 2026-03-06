@@ -350,7 +350,7 @@ def server(input, output, session):
                 layout={"height": "450px"})
 
         # Drop rows with missing coordinates and clamp to valid lat/lon ranges
-        pts = filtered_df()[["decimalLatitude", "decimalLongitude"]].dropna()
+        pts = filtered_df()[["decimalLatitude", "decimalLongitude", "stateProvince"]].dropna(subset=["decimalLatitude", "decimalLongitude"])
         pts = pts[pts["decimalLatitude"].between(-90, 90) & pts["decimalLongitude"].between(-180, 180)]
 
         # Return a plain empty map if the current filter selection has no data
@@ -363,10 +363,25 @@ def server(input, output, session):
         # while smaller datasets use resolution 3 (~41,163 cells) for finer detail.
         resolution = 2 if len(pts) > 5_000 else 3
         latlng_to_cell = np.vectorize(lambda lat, lng: h3.latlng_to_cell(lat, lng, resolution))
-        cells = latlng_to_cell(pts["decimalLatitude"].values, pts["decimalLongitude"].values)
-        
+        pts = pts.copy()
+        pts["cell"] = latlng_to_cell(pts["decimalLatitude"].values, pts["decimalLongitude"].values)
+
         # Count observations per cell; most-frequent cells will receive the darkest color
-        counts = pd.Series(cells).value_counts()
+        counts = pts["cell"].value_counts()
+
+        # Top 5 stateProvinces by count within each cell for the hover tooltip
+        top_locations = (
+            pts.dropna(subset=["stateProvince"])
+            .groupby(["cell", "stateProvince"])
+            .size()
+            .reset_index(name="n")
+            .sort_values("n", ascending=False)
+            .groupby("cell")
+            .head(5)
+            .groupby("cell")
+            .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
+            .to_dict()
+        )
 
         # Colormap is selected by the user; count is normalised to [0, 1] against the max
         cmap = cm.get_cmap(input.colormap())
@@ -385,6 +400,7 @@ def server(input, output, session):
                 "geometry": {"type": "Polygon", "coordinates": [coords]},
                 "properties": {
                     "count": int(count),
+                    "top_locations": [[str(name), int(n)] for name, n in top_locations.get(cell, [])],
                     "style": {
                         "color": color,       # border color
                         "fillColor": color,   # fill color
@@ -394,8 +410,8 @@ def server(input, output, session):
                 },
             })
 
-        # Hover tooltip widget shown in the top-right corner of the map
-        hover_html = widgets.HTML(value="<div style='padding:4px 8px'>Hover over a cell</div>")
+        # Hover info box in the top-right corner
+        hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
         m.add_control(WidgetControl(widget=hover_html, position="topright"))
 
         # Add the hex bin layer; style_callback applies the per-feature color stored above
@@ -406,8 +422,21 @@ def server(input, output, session):
         )
 
         def on_hover(feature, **kwargs):
-            count = feature["properties"]["count"]
-            hover_html.value = f"<div style='padding:4px 8px;background:white;border-radius:4px'><b>{count:,} observations</b></div>"
+            props = feature["properties"]
+            rows = "".join(
+                f"<tr><td>{name}</td><td style='text-align:right;padding-left:12px'>{n:,}</td></tr>"
+                for name, n in props["top_locations"]
+            )
+            hover_html.value = f"""
+                <div style='padding:6px 10px;min-width:160px;background:white;border-radius:4px'>
+                    <b>{props['count']:,} observations</b>
+                    <table style='margin-top:4px;width:100%;font-size:0.9em'>
+                        <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
+                        {rows}
+                    </table>
+                    <div style='font-size:0.8em;color:#888;margin-top:4px'>Showing top 5 locations only</div>
+                </div>
+            """
 
         geojson_layer.on_hover(on_hover)
         m.add_layer(geojson_layer)
@@ -419,7 +448,7 @@ def server(input, output, session):
             f"{label} ({max(1, round(max_count * i / 4)):,})": mcolors.to_hex(cmap(i / 4))
             for i, label in enumerate(legend_steps)
         }
-        m.add_control(LegendControl(legend_colors, title="Observations", position="bottomright"))
+        m.add_control(LegendControl(legend_colors, title="Observations", position="bottomleft"))
 
         return m
 
