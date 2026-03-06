@@ -1,8 +1,9 @@
 from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget, render_altair
 from querychat import QueryChat
-from chatlas import ChatAnthropic, ChatOllama
-from ipyleaflet import Map, basemaps, GeoJSON, LegendControl
+from chatlas import ChatAnthropic, ChatGithub
+from ipyleaflet import Map, basemaps, GeoJSON, LegendControl, WidgetControl
+import ipywidgets as widgets
 import h3
 import numpy as np
 import matplotlib.cm as cm
@@ -37,15 +38,15 @@ BASEMAP_OPTIONS = {
     "Satellite": basemaps.Esri.WorldImagery,             # aerial/satellite imagery
 }
 
-# Use Anthropic when deployed (API key set via environment variable or .env),
-# fall back to a local Ollama model for development without an API key.
-# Set LOCAL_LLM=true in .env to force Ollama even when the API key is present.
-if os.environ.get("LOCAL_LLM", "").lower() == "true":
-    _chat_client = ChatOllama("qwen3:latest")
+# Client selection priority:
+#   1. GITHUB_PAT        -> GitHub Models (gpt-4o-mini)
+#   2. ANTHROPIC_API_KEY -> Anthropic (claude-haiku)
+if os.environ.get("GITHUB_PAT"):
+    _chat_client = ChatGithub(model="gpt-4o-mini")
 elif os.environ.get("ANTHROPIC_API_KEY"):
     _chat_client = ChatAnthropic(model="claude-haiku-4-5-20251001")
 else:
-    _chat_client = ChatOllama("qwen3:latest")
+    raise RuntimeError("No LLM API key found. Set GITHUB_PAT or ANTHROPIC_API_KEY in your .env file.")
 
 _greeting = open(os.path.join(os.path.dirname(__file__), "greeting.md")).read()
 qc = QueryChat(df, "beetles", client=_chat_client, greeting=_greeting)
@@ -382,19 +383,34 @@ def server(input, output, session):
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Polygon", "coordinates": [coords]},
-                "properties": {"style": {
-                    "color": color,       # border color
-                    "fillColor": color,   # fill color
-                    "fillOpacity": 0.7,
-                    "weight": 0.3,        # border thickness
-                }},
+                "properties": {
+                    "count": int(count),
+                    "style": {
+                        "color": color,       # border color
+                        "fillColor": color,   # fill color
+                        "fillOpacity": 0.7,
+                        "weight": 0.3,        # border thickness
+                    },
+                },
             })
 
+        # Hover tooltip widget shown in the top-right corner of the map
+        hover_html = widgets.HTML(value="<div style='padding:4px 8px'>Hover over a cell</div>")
+        m.add_control(WidgetControl(widget=hover_html, position="topright"))
+
         # Add the hex bin layer; style_callback applies the per-feature color stored above
-        m.add_layer(GeoJSON(
+        geojson_layer = GeoJSON(
             data={"type": "FeatureCollection", "features": features},
             style_callback=lambda f: f["properties"]["style"],
-        ))
+            hover_style={"fillOpacity": 0.95, "weight": 1.5},
+        )
+
+        def on_hover(feature, **kwargs):
+            count = feature["properties"]["count"]
+            hover_html.value = f"<div style='padding:4px 8px;background:white;border-radius:4px'><b>{count:,} observations</b></div>"
+
+        geojson_layer.on_hover(on_hover)
+        m.add_layer(geojson_layer)
 
         # --- Legend ---
         # 5 evenly-spaced steps spanning the actual count range in the current filtered data
