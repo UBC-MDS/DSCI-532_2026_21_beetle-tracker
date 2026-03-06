@@ -14,19 +14,26 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 ## Running the App Locally
 
-### 1. Create the conda environment
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/UBC-MDS/DSCI-532_2026_21_beetle-tracker.git
+cd DSCI-532_2026_21_beetle-tracker
+```
+
+### 2. Create the conda environment
 
 ```bash
 conda env create -f environment.yml
 ```
 
-### 2. Activate the environment
+### 3. Activate the environment
 
 ```bash
 conda activate dsci532
 ```
 
-### 3. Start the dashboard
+### 4. Start the dashboard
 
 ```bash
 shiny run src/app.py
