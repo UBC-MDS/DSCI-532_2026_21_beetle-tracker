@@ -1,8 +1,9 @@
 from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget, render_altair
 from querychat import QueryChat
-from chatlas import ChatAnthropic, ChatOllama
-from ipyleaflet import Map, basemaps, GeoJSON, LegendControl
+from chatlas import ChatAnthropic, ChatGithub
+from ipyleaflet import Map, basemaps, GeoJSON, LegendControl, WidgetControl
+import ipywidgets as widgets
 import h3
 import numpy as np
 import matplotlib.cm as cm
@@ -37,18 +38,22 @@ BASEMAP_OPTIONS = {
     "Satellite": basemaps.Esri.WorldImagery,             # aerial/satellite imagery
 }
 
-# Use Anthropic when deployed (API key set via environment variable or .env),
-# fall back to a local Ollama model for development without an API key.
-# Set LOCAL_LLM=true in .env to force Ollama even when the API key is present.
-if os.environ.get("LOCAL_LLM", "").lower() == "true":
-    _chat_client = ChatOllama("qwen3:latest")
-elif os.environ.get("ANTHROPIC_API_KEY"):
-    _chat_client = ChatAnthropic(model="claude-haiku-4-5-20251001")
-else:
-    _chat_client = ChatOllama("qwen3:latest")
+# Client selection priority:
+#   1. GITHUB_PAT        -> GitHub Models (gpt-4o-mini)
+#   2. ANTHROPIC_API_KEY -> Anthropic (claude-haiku)
+_chat_client = None
+try:
+    if os.environ.get("GITHUB_PAT"):
+        _chat_client = ChatGithub(model="gpt-4o-mini")
+    elif os.environ.get("ANTHROPIC_API_KEY"):
+        _chat_client = ChatAnthropic(model="claude-haiku-4-5-20251001")
+    else:
+        print("Warning: No LLM API key found. Set GITHUB_PAT or ANTHROPIC_API_KEY in .env to enable AI Explorer.")
+except Exception as e:
+    print(f"Warning: Could not initialize AI client ({e}). AI Explorer will be disabled.")
 
 _greeting = open(os.path.join(os.path.dirname(__file__), "greeting.md")).read()
-qc = QueryChat(df, "beetles", client=_chat_client, greeting=_greeting)
+qc = QueryChat(df, "beetles", client=_chat_client, greeting=_greeting) if _chat_client is not None else None
 
 app_ui = ui.page_navbar(
     ui.nav_panel(
@@ -149,10 +154,16 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "AI Explorer",
         ui.layout_sidebar(
-            qc.sidebar(),
+            qc.sidebar() if qc is not None else ui.sidebar(
+                ui.p(
+                    "AI Explorer is disabled. Set GITHUB_PAT or ANTHROPIC_API_KEY "
+                    "in your .env file and restart the app to enable it.",
+                    style="color: #b71c1c;",
+                )
+            ),
             ui.card(
                 ui.card_header("Filtered Data"),
-                ui.output_data_frame("ai_table"),
+                ui.output_data_frame("ai_table") if qc is not None else ui.p(""),
                 full_screen=True,
             ),
         ),
@@ -171,11 +182,12 @@ app_ui = ui.page_navbar(
 
 
 def server(input, output, session):
-    sv = qc.server()
+    if qc is not None:
+        sv = qc.server()
 
-    @render.data_frame
-    def ai_table():
-        return sv.df()
+        @render.data_frame
+        def ai_table():
+            return sv.df()
 
     # Shared reactive dataframe: filters the full dataset by year range, region, and basis of record.
     # All outputs consume this so each input change triggers one recomputation (not one per output)
@@ -349,7 +361,7 @@ def server(input, output, session):
                 layout={"height": "450px"})
 
         # Drop rows with missing coordinates and clamp to valid lat/lon ranges
-        pts = filtered_df()[["decimalLatitude", "decimalLongitude"]].dropna()
+        pts = filtered_df()[["decimalLatitude", "decimalLongitude", "stateProvince"]].dropna(subset=["decimalLatitude", "decimalLongitude"])
         pts = pts[pts["decimalLatitude"].between(-90, 90) & pts["decimalLongitude"].between(-180, 180)]
 
         # Return a plain empty map if the current filter selection has no data
@@ -362,10 +374,25 @@ def server(input, output, session):
         # while smaller datasets use resolution 3 (~41,163 cells) for finer detail.
         resolution = 2 if len(pts) > 5_000 else 3
         latlng_to_cell = np.vectorize(lambda lat, lng: h3.latlng_to_cell(lat, lng, resolution))
-        cells = latlng_to_cell(pts["decimalLatitude"].values, pts["decimalLongitude"].values)
-        
+        pts = pts.copy()
+        pts["cell"] = latlng_to_cell(pts["decimalLatitude"].values, pts["decimalLongitude"].values)
+
         # Count observations per cell; most-frequent cells will receive the darkest color
-        counts = pd.Series(cells).value_counts()
+        counts = pts["cell"].value_counts()
+
+        # Top 5 stateProvinces by count within each cell for the hover tooltip
+        top_locations = (
+            pts.dropna(subset=["stateProvince"])
+            .groupby(["cell", "stateProvince"])
+            .size()
+            .reset_index(name="n")
+            .sort_values("n", ascending=False)
+            .groupby("cell")
+            .head(5)
+            .groupby("cell")
+            .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
+            .to_dict()
+        )
 
         # Colormap is selected by the user; count is normalised to [0, 1] against the max
         cmap = cm.get_cmap(input.colormap())
@@ -382,19 +409,48 @@ def server(input, output, session):
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Polygon", "coordinates": [coords]},
-                "properties": {"style": {
-                    "color": color,       # border color
-                    "fillColor": color,   # fill color
-                    "fillOpacity": 0.7,
-                    "weight": 0.3,        # border thickness
-                }},
+                "properties": {
+                    "count": int(count),
+                    "top_locations": [[str(name), int(n)] for name, n in top_locations.get(cell, [])],
+                    "style": {
+                        "color": color,       # border color
+                        "fillColor": color,   # fill color
+                        "fillOpacity": 0.7,
+                        "weight": 0.3,        # border thickness
+                    },
+                },
             })
 
+        # Hover info box in the top-right corner
+        hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
+        m.add_control(WidgetControl(widget=hover_html, position="topright"))
+
         # Add the hex bin layer; style_callback applies the per-feature color stored above
-        m.add_layer(GeoJSON(
+        geojson_layer = GeoJSON(
             data={"type": "FeatureCollection", "features": features},
             style_callback=lambda f: f["properties"]["style"],
-        ))
+            hover_style={"fillOpacity": 0.95, "weight": 1.5},
+        )
+
+        def on_hover(feature, **kwargs):
+            props = feature["properties"]
+            rows = "".join(
+                f"<tr><td>{name}</td><td style='text-align:right;padding-left:12px'>{n:,}</td></tr>"
+                for name, n in props["top_locations"]
+            )
+            hover_html.value = f"""
+                <div style='padding:6px 10px;min-width:160px;background:white;border-radius:4px'>
+                    <b>{props['count']:,} observations</b>
+                    <table style='margin-top:4px;width:100%;font-size:0.9em'>
+                        <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
+                        {rows}
+                    </table>
+                    <div style='font-size:0.8em;color:#888;margin-top:4px'>Showing top 5 locations only</div>
+                </div>
+            """
+
+        geojson_layer.on_hover(on_hover)
+        m.add_layer(geojson_layer)
 
         # --- Legend ---
         # 5 evenly-spaced steps spanning the actual count range in the current filtered data
@@ -403,7 +459,7 @@ def server(input, output, session):
             f"{label} ({max(1, round(max_count * i / 4)):,})": mcolors.to_hex(cmap(i / 4))
             for i, label in enumerate(legend_steps)
         }
-        m.add_control(LegendControl(legend_colors, title="Observations", position="bottomright"))
+        m.add_control(LegendControl(legend_colors, title="Observations", position="bottomleft"))
 
         return m
 
