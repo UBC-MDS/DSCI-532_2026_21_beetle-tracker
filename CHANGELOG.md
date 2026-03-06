@@ -1,8 +1,9 @@
 # Change Log
 
-## 0.2.0
+## 0.3.0
 
 ### Added
+* Added a CSV download button to the AI Explorer page that downloads the QueryChat-filtered dataframe (`#64`).
 
 #### Reset Button
 
