@@ -4,6 +4,7 @@ channels:
 dependencies:
   - ipykernel
   - ipyleaflet
+  - ipywidgets
   - matplotlib
   - nbformat
   - numpy
