@@ -21,7 +21,7 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:UBC-MDS/DSCI-532_2026_21_beetle-tracker.git
+git clone https://github.com/UBC-MDS/DSCI-532_2026_21_beetle-tracker.git
 cd DSCI-532_2026_21_beetle-tracker
 ```
 
@@ -31,11 +31,12 @@ cd DSCI-532_2026_21_beetle-tracker
 conda env create -f environment.yml
 ```
 
-> If the environment already exists, remove it first:
->
-> ```bash
-> conda env remove -n dsci532
-> ```
+sketch_png
+If the environment already exists, remove it first:
+
+```bash
+conda env remove -n dsci532
+```
 
 ### 3. Activate the environment
 
