@@ -20,6 +20,9 @@ The dashboard now supports authentication via a GitHub API key for accessing the
 
 Added a CSV download button to the AI Explorer page that downloads the QueryChat-filtered dataframe (`#64`).
 
+### Basis of Record Pie Chart(AI filtered) 
+Added a Basis of Record pie chart to the AI Explorer panel to visualize the distribution of record types in the AI-filtered dataset.
+
 ### Changed
 
 #### Dashboard Runs Without API Keys
