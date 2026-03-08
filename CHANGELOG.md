@@ -16,6 +16,10 @@ Hovering over map regions now displays a tooltip showing the top 5 beetle count 
 
 The dashboard now supports authentication via a GitHub API key for accessing the AI features, configured through a `.env` file. (#63)
 
+#### CSV download button
+
+Added a CSV download button to the AI Explorer page that downloads the QueryChat-filtered dataframe (`#64`).
+
 ### Changed
 
 #### Dashboard Runs Without API Keys
@@ -37,8 +41,6 @@ Optimised map loading to prevent the map from graying out under certain renderin
 ## 0.2.0
 
 ### Added
-
-* Added a CSV download button to the AI Explorer page that downloads the QueryChat-filtered dataframe (`#64`).
 
 * Added a plot of occurrences over time on the AI-powered chat panel. Now, you can modify the filtered dataframe by telling the AI which filters to apply, the results of which then show up on the chart.
 
