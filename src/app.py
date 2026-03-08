@@ -180,8 +180,8 @@ app_ui = ui.page_navbar(
                     output_widget("ai_plot_timeseries"),
                 ),
                 ui.card(
-                    ui.card_header("Second Chart"),
-                    output_widget("ai_plot_second"),  # placeholder for next chart
+                    ui.card_header("Basis of Record (AI Filtered)"),
+                    output_widget("ai_plot_basis"),
                 ),
                 col_widths=[6, 6],
             ),
@@ -248,6 +248,24 @@ def server(input, output, session):
                 .add_params(nearest)
             )
             return (line + points).properties(width="container", height=300)
+
+        @render_altair
+        def ai_plot_basis():
+            counts = sv.df()["basisOfRecord"].dropna().value_counts().reset_index()
+            counts.columns = ["basisOfRecord", "count"]
+
+            return (
+                alt.Chart(counts)
+                .mark_arc()
+                .encode(
+                    theta=alt.Theta("count:Q"),
+                    color=alt.Color(
+                        "basisOfRecord:N", legend=alt.Legend(title="Basis of Record")
+                    ),
+                    tooltip=["basisOfRecord", "count"],
+                )
+                .properties(width="container", height=350)
+            )
 
     # Shared reactive dataframe: filters the full dataset by year range, region, and basis of record.
     # All outputs consume this so each input change triggers one recomputation (not one per output)
