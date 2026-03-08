@@ -28,7 +28,6 @@ README has been expanded with clearer installation and configuration instruction
 
 ### Fixed
 
-
 #### Map Graying Out
 
 Optimised map loading to prevent the map from graying out under certain rendering conditions. (#69)
@@ -38,7 +37,10 @@ Optimised map loading to prevent the map from graying out under certain renderin
 ## 0.2.0
 
 ### Added
+
 * Added a CSV download button to the AI Explorer page that downloads the QueryChat-filtered dataframe (`#64`).
+
+* Added a plot of occurrences over time on the AI-powered chat panel. Now, you can modify the filtered dataframe by telling the AI which filters to apply, the results of which then show up on the chart.
 
 #### Reset Button
 
