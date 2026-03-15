@@ -18,6 +18,8 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 ## How to Use the Dashboard
 
+This dashboard is designed for anyone interested in tracking the spread of the Japanese Beetle (*Popillia japonica*). From farmers and policy makers to citizen scientists. Use the filters to explore where and when the beetle has been observed, and how different observation types contribute to the data.
+
 ### Dashboard Tab
 
 Use the sidebar filters to explore beetle observations:
@@ -70,13 +72,44 @@ conda env remove -n dsci532
 conda activate dsci532
 ```
 
-### 4. Start the dashboard
+### 4. Create
 
 ```bash
 shiny run src/app.py
 ```
 
+### 5. Generate Processed Data (one-time setup)
+
+Before running the app, convert the raw data to Parquet format.
+This only needs to be done once, or whenever the raw data is updated:
+
+```bash
+python src/prep_data.py
+```
+
 Open the URL provided in the terminal output to view the app in your browser.
+
+## Running Tests
+
+### Unit tests (no app needed)
+
+```bash
+pytest tests/test_utils.py -v
+```
+
+### Playwright end-to-end tests (app must be running first)
+
+In one terminal, start the app:
+
+```bash
+shiny run src/app.py --port 8000
+```
+
+In another terminal, run the tests:
+
+```bash
+pytest tests/test_app_playwright.py -v
+```
 
 ## AI Explorer Tab
 
@@ -109,3 +142,11 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 ```
 
 If both are present, the GitHub PAT takes priority. The `.env` file is listed in `.gitignore` and will not be committed.
+
+## License
+
+This project is licensed under the terms of the [LICENSE](LICENSE) file.
+
+## Contributors
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.

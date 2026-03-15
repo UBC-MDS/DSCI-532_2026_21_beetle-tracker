@@ -10,15 +10,28 @@
 - Added `conftest.py` to configure the test path for `utils.py` (#96)
 - Added test instructions to README (#98)
 - Added "How to Use the Dashboard" section to README explaining all sidebar controls, value boxes, map, and AI Explorer tab (#100)
+- Added `prep_data.py` one-time ETL script to convert raw CSV to Parquet format (`data/processed/`)
+- Added map-click interaction so users can click a hexagon on the geographic distribution map and use it as a dashboard filter.
+- Added a `Clear Map Selection` button to remove only the map-based filter without resetting the other sidebar controls.
+- Added a sidebar summary that reports when a map area is selected and how many observations are in that area.
 
 ### Changed
 
 - Added `pytest`, `pytest-playwright`, and `playwright` to `environment.yml` (#97)
 - Refactored `filtered_df()`, `vb_first_recorded()`, and `vb_status()` in `app.py` to use `utils.py` helper functions (#96)
+- Switched data loading from eager `pd.read_csv` to lazy ibis + DuckDB connection to Parquet file
+- Replaced `filtered_df()` with `filtered_expr()` — all filtering now happens at the DuckDB query layer before any data enters memory
+- Updated all dashboard outputs (value boxes, charts, map) to call `.execute()` individually at render time
+- Month extraction in `plot_monthly` now uses regex to handle mixed `eventDate` formats in the raw data
+- Updated the geographic distribution map so selected hexagons are visually highlighted.
+- Updated dashboard outputs to react to map-based filtering in addition to the existing sidebar controls.
 
 ### Fixed
 
 - Addressed feedback: added dashboard usage instructions to README to reduce learning curve for new users (#100)
+- Fixed `countryCode` and `basisOfRecord` dropdown population to use ibis-native null filtering instead of pandas `.dropna()`
+- Fixed `vb_status` crash caused by `_` tuple unpacking overwriting the ibis `_` column reference import
+- Improved map-selection messaging by replacing the raw H3 hex ID with more user-friendly sidebar text.
 
 - **Feedback prioritization issue link:** #86
 
@@ -74,4 +87,3 @@ Optimised map loading to prevent the map from graying out under certain renderin
 #### Reset Button
 
 This button on the dash board will reset all inputs to original.
-
