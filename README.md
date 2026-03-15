@@ -18,6 +18,8 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 ## How to Use the Dashboard
 
+This dashboard is designed for anyone interested in tracking the spread of the Japanese Beetle (*Popillia japonica*). From farmers and policy makers to citizen scientists. Use the filters to explore where and when the beetle has been observed, and how different observation types contribute to the data.
+
 ### Dashboard Tab
 
 Use the sidebar filters to explore beetle observations:
