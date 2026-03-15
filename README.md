@@ -109,3 +109,11 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 ```
 
 If both are present, the GitHub PAT takes priority. The `.env` file is listed in `.gitignore` and will not be committed.
+
+## License
+
+This project is licensed under the terms of the [LICENSE](LICENSE) file.
+
+## Contributors
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
