@@ -27,3 +27,5 @@ dependencies:
     - pytest
     - pytest-playwright
     - playwright
+    - ibis-framework[duckdb]
+

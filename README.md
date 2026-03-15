@@ -16,6 +16,34 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 ![Dashboard demo](img/demo.gif)
 
+## How to Use the Dashboard
+
+This dashboard is designed for anyone interested in tracking the spread of the Japanese Beetle (*Popillia japonica*). From farmers and policy makers to citizen scientists. Use the filters to explore where and when the beetle has been observed, and how different observation types contribute to the data.
+
+### Dashboard Tab
+
+Use the sidebar filters to explore beetle observations:
+
+- **Year Range**: slide to restrict observations to a specific time window
+- **Filter by Region**: select a country code to show only observations from that region
+- **Basis of Record**: choose the observation type (e.g. `HUMAN_OBSERVATION`, `PRESERVED_SPECIMEN`)
+- **Reset Filters**: restores all filters to their default (full dataset) state
+- **Map Underlay / Color Scale**: change the map background and hex bin colour scheme
+
+The three summary cards update automatically with every filter change:
+
+- **Total Observations**: count of rows matching the current filters
+- **First Recorded**: earliest year with an observation in the filtered data
+- **Status in Region**: shows `Present` if any observation falls in the slider's upper year, otherwise `Not Detected`
+
+The map shows observation density using H3 hexagonal bins — darker cells mean more observations. Hover over a cell to see the top 5 locations and their counts.
+
+The four charts below the map show: occurrences over time, breakdown by basis of record, top 10 rights holders, and seasonal observations by month.
+
+### AI Explorer Tab
+
+Type a natural language question about the beetle data (e.g. "how many observations are from the US after 2010?"). The AI will query the dataset and return an answer along with a filtered table and charts. Use the Download CSV button to export the current AI-filtered data.
+
 ## Running the App Locally
 
 ### 1. Clone the repository
@@ -44,10 +72,19 @@ conda env remove -n dsci532
 conda activate dsci532
 ```
 
-### 4. Start the dashboard
+### 4. Create
 
 ```bash
 shiny run src/app.py
+```
+
+### 5. Generate Processed Data (one-time setup)
+
+Before running the app, convert the raw data to Parquet format.
+This only needs to be done once, or whenever the raw data is updated:
+
+```bash
+python src/prep_data.py
 ```
 
 Open the URL provided in the terminal output to view the app in your browser.
@@ -105,3 +142,11 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 ```
 
 If both are present, the GitHub PAT takes priority. The `.env` file is listed in `.gitignore` and will not be committed.
+
+## License
+
+This project is licensed under the terms of the [LICENSE](LICENSE) file.
+
+## Contributors
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
