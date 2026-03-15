@@ -52,6 +52,28 @@ shiny run src/app.py
 
 Open the URL provided in the terminal output to view the app in your browser.
 
+## Running Tests
+
+### Unit tests (no app needed)
+
+```bash
+pytest tests/test_utils.py -v
+```
+
+### Playwright end-to-end tests (app must be running first)
+
+In one terminal, start the app:
+
+```bash
+shiny run src/app.py --port 8000
+```
+
+In another terminal, run the tests:
+
+```bash
+pytest tests/test_app_playwright.py -v
+```
+
 ## AI Explorer Tab
 
 The **AI Explorer** tab requires an API key to function. The rest of the dashboard works without one.
