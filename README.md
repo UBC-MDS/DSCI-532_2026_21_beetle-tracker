@@ -44,10 +44,19 @@ conda env remove -n dsci532
 conda activate dsci532
 ```
 
-### 4. Start the dashboard
+### 4. Create
 
 ```bash
 shiny run src/app.py
+```
+
+### 5. Generate Processed Data (one-time setup)
+
+Before running the app, convert the raw data to Parquet format.
+This only needs to be done once, or whenever the raw data is updated:
+
+```bash
+python src/prep_data.py
 ```
 
 Open the URL provided in the terminal output to view the app in your browser.
