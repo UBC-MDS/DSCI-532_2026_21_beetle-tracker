@@ -1,5 +1,29 @@
 # Change Log
 
+## 0.4.0
+
+### Added
+
+- Added `utils.py` with pure helper functions extracted from `app.py` for testability (`apply_filters`, `compute_first_recorded`, `compute_status`, `prepare_timeseries`, `prepare_basis_counts`, `prepare_rights_holder`, `prepare_monthly`) (#96)
+- Added 25 unit tests in `tests/test_utils.py` covering all filtering and chart data preparation logic (#96)
+- Added 5 Playwright end-to-end tests in `tests/test_app_playwright.py` covering year range filter, reset button, first recorded value box, basis of record filter, and download CSV button (#96)
+- Added `conftest.py` to configure the test path for `utils.py` (#96)
+- Added test instructions to README (#98)
+- Added "How to Use the Dashboard" section to README explaining all sidebar controls, value boxes, map, and AI Explorer tab (#100)
+
+### Changed
+
+- Added `pytest`, `pytest-playwright`, and `playwright` to `environment.yml` (#97)
+- Refactored `filtered_df()`, `vb_first_recorded()`, and `vb_status()` in `app.py` to use `utils.py` helper functions (#96)
+
+### Fixed
+
+- Addressed feedback: added dashboard usage instructions to README to reduce learning curve for new users (#100)
+
+- **Feedback prioritization issue link:** #86
+
+---
+
 ## 0.3.0
 
 ### Added
@@ -51,10 +75,3 @@ Optimised map loading to prevent the map from graying out under certain renderin
 
 This button on the dash board will reset all inputs to original.
 
-### Changed
-
-### Fixed
-
-### Known Issues
-
-### Reflection
