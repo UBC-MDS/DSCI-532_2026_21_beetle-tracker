@@ -39,6 +39,18 @@ BASEMAP_OPTIONS = {
     "Satellite": basemaps.Esri.WorldImagery,  # aerial/satellite imagery
 }
 
+
+# Reuse the same H3 cell assignment logic for both drawing and filtering map data.
+def add_h3_cells(data: pd.DataFrame, resolution: int) -> pd.DataFrame:
+    data = data.copy()
+    latlng_to_cell = np.vectorize(
+        lambda lat, lng: h3.latlng_to_cell(lat, lng, resolution)
+    )
+    data["cell"] = latlng_to_cell(
+        data["decimalLatitude"].values, data["decimalLongitude"].values
+    )
+    return data
+
 # Client selection priority:
 #   1. GITHUB_PAT        -> GitHub Models (gpt-4o-mini)
 #   2. ANTHROPIC_API_KEY -> Anthropic (claude-haiku)
@@ -95,6 +107,14 @@ app_ui = ui.page_navbar(
                     label="Reset Filters",
                     class_="btn-warning w-100 mt-2",
                 ),
+                # Clear any hex clicked on the map without resetting the other sidebar filters.
+                ui.input_action_button(
+                    id="clear_map_selection",
+                    label="Clear Map Selection",
+                    class_="btn-outline-secondary w-100 mt-2",
+                ),
+                # Show whether a map-driven filter is currently active.
+                ui.output_ui("map_selection_status"),
                 ui.input_select(
                     id="basemap",
                     label="Map Underlay",
@@ -216,6 +236,9 @@ app_ui = ui.page_navbar(
 
 
 def server(input, output, session):
+    # Store the currently selected H3 hex so map clicks can behave like an input.
+    selected_map_cell = reactive.value(None)
+
     if qc is not None:
         sv = qc.server()
 
@@ -270,7 +293,7 @@ def server(input, output, session):
     # Shared reactive dataframe: filters the full dataset by year range, region, and basis of record.
     # All outputs consume this so each input change triggers one recomputation (not one per output)
     @reactive.calc
-    def filtered_df():
+    def base_filtered_df():
         year_min, year_max = input.year_range()
         mask = df["year"].between(year_min, year_max)
         if input.region() != "All":
@@ -278,6 +301,69 @@ def server(input, output, session):
         if input.basis_record() != "All":
             mask &= df["basisOfRecord"] == input.basis_record()
         return df[mask]
+
+    # Build the point dataset used to draw the map and map each point into an H3 cell.
+    @reactive.calc
+    def map_points_df():
+        pts = base_filtered_df()[
+            ["decimalLatitude", "decimalLongitude", "stateProvince", "countryCode"]
+        ].dropna(subset=["decimalLatitude", "decimalLongitude"])
+        pts = pts[
+            pts["decimalLatitude"].between(-90, 90)
+            & pts["decimalLongitude"].between(-180, 180)
+        ]
+        if pts.empty:
+            return pts.assign(cell=pd.Series(dtype="object"))
+
+        resolution = 2 if len(pts) > 5_000 else 3
+        return add_h3_cells(pts, resolution)
+
+    # Apply the clicked map cell as an extra filter on top of the existing sidebar filters.
+    @reactive.calc
+    def filtered_df():
+        selected_cell = selected_map_cell()
+        data = base_filtered_df()
+
+        if selected_cell is None:
+            return data
+
+        pts = map_points_df()
+        if pts.empty:
+            return data.iloc[0:0]
+
+        selected_points = pts.loc[
+            pts["cell"] == selected_cell, ["decimalLatitude", "decimalLongitude"]
+        ].drop_duplicates()
+        if selected_points.empty:
+            return data.iloc[0:0]
+
+        return data.merge(
+            selected_points,
+            on=["decimalLatitude", "decimalLongitude"],
+            how="inner",
+        )
+
+    # Report the current map-selection filter state back to the sidebar.
+    @render.ui
+    def map_selection_status():
+        selected_cell = selected_map_cell()
+        if selected_cell is None:
+            return ui.div(
+                ui.p("Map interaction", class_="fw-bold mt-2 mb-1"),
+                ui.p(
+                    "Click a map area to filter the dashboard.",
+                    class_="small mb-0",
+                ),
+            )
+
+        selected_count = len(filtered_df())
+        return ui.div(
+            ui.p("Selected map area", class_="fw-bold mt-2 mb-1"),
+            ui.p(
+                f"Observations in this area: {selected_count:,}",
+                class_="small mb-0",
+            ),
+        )
 
     # Value box: count of rows in the filtered dataset
     @render.ui
@@ -434,6 +520,9 @@ def server(input, output, session):
     # Reactively redraws whenever any sidebar filter or display option changes
     @render_widget
     def map():
+        # Read the selected cell so the active hex can be highlighted on redraw.
+        current_selected_cell = selected_map_cell()
+
         # Base map tile layer is selected by the user via the sidebar dropdown
         m = Map(
             center=(20, 0),
@@ -443,13 +532,7 @@ def server(input, output, session):
         )
 
         # Drop rows with missing coordinates and clamp to valid lat/lon ranges
-        pts = filtered_df()[
-            ["decimalLatitude", "decimalLongitude", "stateProvince"]
-        ].dropna(subset=["decimalLatitude", "decimalLongitude"])
-        pts = pts[
-            pts["decimalLatitude"].between(-90, 90)
-            & pts["decimalLongitude"].between(-180, 180)
-        ]
+        pts = map_points_df()
 
         # Return a plain empty map if the current filter selection has no data
         if pts.empty:
@@ -459,15 +542,6 @@ def server(input, output, session):
         # Resolution adapts to the number of points so the GeoJSON payload stays manageable:
         # large datasets use resolution 2 (~5,882 global cells) to avoid browser timeouts,
         # while smaller datasets use resolution 3 (~41,163 cells) for finer detail.
-        resolution = 2 if len(pts) > 5_000 else 3
-        latlng_to_cell = np.vectorize(
-            lambda lat, lng: h3.latlng_to_cell(lat, lng, resolution)
-        )
-        pts = pts.copy()
-        pts["cell"] = latlng_to_cell(
-            pts["decimalLatitude"].values, pts["decimalLongitude"].values
-        )
-
         # Count observations per cell; most-frequent cells will receive the darkest color
         counts = pts["cell"].value_counts()
 
@@ -503,6 +577,7 @@ def server(input, output, session):
                     "geometry": {"type": "Polygon", "coordinates": [coords]},
                     "properties": {
                         "count": int(count),
+                        "cell": cell,
                         "top_locations": [
                             [str(name), int(n)]
                             for name, n in top_locations.get(cell, [])
@@ -510,8 +585,8 @@ def server(input, output, session):
                         "style": {
                             "color": color,  # border color
                             "fillColor": color,  # fill color
-                            "fillOpacity": 0.7,
-                            "weight": 0.3,  # border thickness
+                            "fillOpacity": 0.95 if cell == current_selected_cell else 0.7,
+                            "weight": 2 if cell == current_selected_cell else 0.3,
                         },
                     },
                 }
@@ -543,11 +618,19 @@ def server(input, output, session):
                         <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
                         {rows}
                     </table>
-                    <div style='font-size:0.8em;color:#888;margin-top:4px'>Showing top 5 locations only</div>
+                    <div style='font-size:0.8em;color:#888;margin-top:4px'>Showing up to 5 named locations</div>
                 </div>
             """
 
         geojson_layer.on_hover(on_hover)
+
+        # Turn a clicked hex into a reactive filter value for the rest of the app.
+        def on_click(event=None, feature=None, **kwargs):
+            if feature is None:
+                return
+            selected_map_cell.set(feature["properties"]["cell"])
+
+        geojson_layer.on_click(on_click)
         m.add_layer(geojson_layer)
 
         # --- Legend ---
@@ -572,6 +655,13 @@ def server(input, output, session):
         ui.update_slider("year_range", value=[YEAR_MIN, YEAR_MAX])
         ui.update_selectize("region", selected="All")
         ui.update_radio_buttons("basis_record", selected="All")
+        selected_map_cell.set(None)
+
+    # Let the user drop only the map-driven filter while keeping the sidebar choices.
+    @reactive.effect
+    @reactive.event(input.clear_map_selection)
+    def clear_map_selection():
+        selected_map_cell.set(None)
 
     @render.download(filename="beetle_data.csv")
     def download_csv():
