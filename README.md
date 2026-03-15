@@ -16,6 +16,32 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 ![Dashboard demo](img/demo.gif)
 
+## How to Use the Dashboard
+
+### Dashboard Tab
+
+Use the sidebar filters to explore beetle observations:
+
+- **Year Range**: slide to restrict observations to a specific time window
+- **Filter by Region**: select a country code to show only observations from that region
+- **Basis of Record**: choose the observation type (e.g. `HUMAN_OBSERVATION`, `PRESERVED_SPECIMEN`)
+- **Reset Filters**: restores all filters to their default (full dataset) state
+- **Map Underlay / Color Scale**: change the map background and hex bin colour scheme
+
+The three summary cards update automatically with every filter change:
+
+- **Total Observations**: count of rows matching the current filters
+- **First Recorded**: earliest year with an observation in the filtered data
+- **Status in Region**: shows `Present` if any observation falls in the slider's upper year, otherwise `Not Detected`
+
+The map shows observation density using H3 hexagonal bins — darker cells mean more observations. Hover over a cell to see the top 5 locations and their counts.
+
+The four charts below the map show: occurrences over time, breakdown by basis of record, top 10 rights holders, and seasonal observations by month.
+
+### AI Explorer Tab
+
+Type a natural language question about the beetle data (e.g. "how many observations are from the US after 2010?"). The AI will query the dataset and return an answer along with a filtered table and charts. Use the Download CSV button to export the current AI-filtered data.
+
 ## Running the App Locally
 
 ### 1. Clone the repository
