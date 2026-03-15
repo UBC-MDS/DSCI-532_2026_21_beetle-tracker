@@ -1,5 +1,42 @@
 # Change Log
 
+## 0.4.0
+
+### Added
+
+- Added `utils.py` with pure helper functions extracted from `app.py` for testability (`apply_filters`, `compute_first_recorded`, `compute_status`, `prepare_timeseries`, `prepare_basis_counts`, `prepare_rights_holder`, `prepare_monthly`) (#96)
+- Added 25 unit tests in `tests/test_utils.py` covering all filtering and chart data preparation logic (#96)
+- Added 5 Playwright end-to-end tests in `tests/test_app_playwright.py` covering year range filter, reset button, first recorded value box, basis of record filter, and download CSV button (#96)
+- Added `conftest.py` to configure the test path for `utils.py` (#96)
+- Added test instructions to README (#98)
+- Added "How to Use the Dashboard" section to README explaining all sidebar controls, value boxes, map, and AI Explorer tab (#100)
+- Added `prep_data.py` one-time ETL script to convert raw CSV to Parquet format (`data/processed/`)
+- Added map-click interaction so users can click a hexagon on the geographic distribution map and use it as a dashboard filter.
+- Added a `Clear Map Selection` button to remove only the map-based filter without resetting the other sidebar controls.
+- Added a sidebar summary that reports when a map area is selected and how many observations are in that area.
+
+### Changed
+
+- Added `pytest`, `pytest-playwright`, and `playwright` to `environment.yml` (#97)
+- Refactored `filtered_df()`, `vb_first_recorded()`, and `vb_status()` in `app.py` to use `utils.py` helper functions (#96)
+- Switched data loading from eager `pd.read_csv` to lazy ibis + DuckDB connection to Parquet file
+- Replaced `filtered_df()` with `filtered_expr()` — all filtering now happens at the DuckDB query layer before any data enters memory
+- Updated all dashboard outputs (value boxes, charts, map) to call `.execute()` individually at render time
+- Month extraction in `plot_monthly` now uses regex to handle mixed `eventDate` formats in the raw data
+- Updated the geographic distribution map so selected hexagons are visually highlighted.
+- Updated dashboard outputs to react to map-based filtering in addition to the existing sidebar controls.
+
+### Fixed
+
+- Addressed feedback: added dashboard usage instructions to README to reduce learning curve for new users (#100)
+- Fixed `countryCode` and `basisOfRecord` dropdown population to use ibis-native null filtering instead of pandas `.dropna()`
+- Fixed `vb_status` crash caused by `_` tuple unpacking overwriting the ibis `_` column reference import
+- Improved map-selection messaging by replacing the raw H3 hex ID with more user-friendly sidebar text.
+
+- **Feedback prioritization issue link:** #86
+
+---
+
 ## 0.3.0
 
 ### Added
@@ -50,64 +87,3 @@ Optimised map loading to prevent the map from graying out under certain renderin
 #### Reset Button
 
 This button on the dash board will reset all inputs to original.
-
-### Changed
-
-### Fixed
-
-### Known Issues
-
-### Reflection
-
-## [0.4.0] - 2026-03-17
-
-### Added
-
-* Added `prep_data.py` one-time ETL script to convert raw CSV to Parquet format (`data/processed/`)
-* Added map-click interaction so users can click a hexagon on the geographic distribution map and use it as a dashboard filter.
-* Added a `Clear Map Selection` button to remove only the map-based filter without resetting the other sidebar controls.
-* Added a sidebar summary that reports when a map area is selected and how many observations are in that area.
-
-### Changed
-
-* Switched data loading from eager `pd.read_csv` to lazy ibis + DuckDB connection to Parquet file
-* Replaced `filtered_df()` with `filtered_expr()` — all filtering now happens at the DuckDB query layer before any data enters memory
-* Updated all dashboard outputs (value boxes, charts, map) to call `.execute()` individually at render time
-* Month extraction in `plot_monthly` now uses regex to handle mixed `eventDate` formats in the raw data
-* Updated the geographic distribution map so selected hexagons are visually highlighted.
-* Updated dashboard outputs to react to map-based filtering in addition to the existing sidebar controls.
-
-### Fixed
-
-* Fixed `countryCode` and `basisOfRecord` dropdown population to use ibis-native null filtering instead of pandas `.dropna()`
-* Fixed `vb_status` crash caused by `_` tuple unpacking overwriting the ibis `_` column reference import
-* Improved map-selection messaging by replacing the raw H3 hex ID with more user-friendly sidebar text.
-
-* **Feedback prioritization issue link:** #...
-
-### Known Issues
-
-* <!-- Anything incomplete or broken TAs should be aware of (so it isn't mistaken for unfinished work). -->
-
-* **Option chosen:** D
-* **PR:** #...
-* **Why this option over the others:** We prioritized Option D because it fits the dashboard’s existing map-centered design and shared reactive filtering structure, making it the most feasible way to add meaningful interactivity with lower implementation risk than the other advanced feature options.
-* **Feature prioritization issue link:** #...
-
-### Collaboration
-
-<!-- Summary of workflow or collaboration improvements made since M3. -->
-
-* **CONTRIBUTING.md:** <!-- Link to the PR that updated it with your M3 retrospective and M4 norms. -->
-* **M3 retrospective:** <!-- What changed in your workflow after M3 collaboration feedback. -->
-* **M4:** <!-- What you tried or improved this milestone. -->
-
-### Reflection
-
-<!-- Standard (see General Guidelines): what the dashboard does well, current limitations,
-     any intentional deviations from DSCI 531 visualization best practices. -->
-
-<!-- Trade-offs: one sentence on feedback prioritization - full rationale is in #<issue> and ### Changed above. -->
-
-<!-- Most useful: which lecture, material, or feedback shaped your work most this milestone,
-     and anything you wish had been covered. -->
