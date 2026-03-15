@@ -24,3 +24,6 @@ dependencies:
     - anthropic
     - chatlas
     - python-dotenv
+    - pytest
+    - pytest-playwright
+    - playwright
