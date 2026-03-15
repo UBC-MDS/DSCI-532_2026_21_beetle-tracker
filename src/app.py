@@ -13,22 +13,49 @@ import os
 import altair as alt
 from dotenv import load_dotenv
 import io
+import ibis
+from ibis import _
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-# Load the dataset once at startup; all reactive outputs read from this shared dataframe
-DATA_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "data", "raw", "gbif-beetle.csv"
+# LAZY data loading. this just connects to duckdb, and tells it where the parquet file is
+PARQUET_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "data", "processed", "gbif-beetle.parquet"
 )
-df = pd.read_csv(DATA_PATH, sep="\t", low_memory=False)
+con = ibis.duckdb.connect()
+beetle_df = con.read_parquet(PARQUET_PATH)
 
-# Slider bounds derived from the data so they stay correct if the dataset is updated
-YEAR_MIN = int(df["year"].min())
-YEAR_MAX = int(df["year"].max())
+# just to get min/max year for sliders. not a lot of data though.
+_meta = beetle_df.aggregate(
+    year_min=beetle_df["year"].min(),
+    year_max=beetle_df["year"].max(),
+).execute()
 
-# Dropdown/radio choices derived from the data
-REGIONS = ["All"] + sorted(df["countryCode"].dropna().unique().tolist())
-BASIS_OF_RECORD = ["All"] + sorted(df["basisOfRecord"].dropna().unique().tolist())
+YEAR_MIN = int(_meta["year_min"].iloc[0])
+YEAR_MAX = int(_meta["year_max"].iloc[0])
+
+# Unique sorted values for selectize / radio buttons
+REGIONS = ["All"] + (
+    beetle_df.filter(_.countryCode.notnull())
+    .select("countryCode")
+    .distinct()
+    .order_by("countryCode")
+    .execute()["countryCode"]
+    .tolist()
+)
+BASIS_OF_RECORD = ["All"] + (
+    beetle_df.filter(_.basisOfRecord.notnull())
+    .select("basisOfRecord")
+    .distinct()
+    .order_by("basisOfRecord")
+    .execute()["basisOfRecord"]
+    .tolist()
+)
+
+# querychat operates on an in-memory DataFrame.  We load it once here so it
+# doesn't have to re-read the file on every chat turn.  This is the *only*
+# place we pull the whole dataset into RAM
+df_full = beetle_df.execute()
 
 # Available map underlays; keys are displayed in the sidebar dropdown
 BASEMAP_OPTIONS = {
@@ -71,7 +98,7 @@ except Exception as e:
 
 _greeting = open(os.path.join(os.path.dirname(__file__), "greeting.md")).read()
 qc = (
-    QueryChat(df, "beetles", client=_chat_client, greeting=_greeting)
+    QueryChat(df_full, "beetles", client=_chat_client, greeting=_greeting)
     if _chat_client is not None
     else None
 )
@@ -290,28 +317,36 @@ def server(input, output, session):
                 .properties(width="container", height=350)
             )
 
-    # Shared reactive dataframe: filters the full dataset by year range, region, and basis of record.
-    # All outputs consume this so each input change triggers one recomputation (not one per output)
     @reactive.calc
-    def base_filtered_df():
+    def filtered_expr():
         year_min, year_max = input.year_range()
-        mask = df["year"].between(year_min, year_max)
+
+        expr = beetle_df.filter(_.year.between(year_min, year_max))
+
         if input.region() != "All":
-            mask &= df["countryCode"] == input.region()
+            expr = expr.filter(_.countryCode == input.region())
+
         if input.basis_record() != "All":
-            mask &= df["basisOfRecord"] == input.basis_record()
-        return df[mask]
+            expr = expr.filter(_.basisOfRecord == input.basis_record())
+
+        return expr
 
     # Build the point dataset used to draw the map and map each point into an H3 cell.
     @reactive.calc
     def map_points_df():
-        pts = base_filtered_df()[
-            ["decimalLatitude", "decimalLongitude", "stateProvince", "countryCode"]
-        ].dropna(subset=["decimalLatitude", "decimalLongitude"])
-        pts = pts[
-            pts["decimalLatitude"].between(-90, 90)
-            & pts["decimalLongitude"].between(-180, 180)
-        ]
+        pts = (
+            filtered_expr()
+            .select(
+                ["decimalLatitude", "decimalLongitude", "stateProvince", "countryCode"]
+            )
+            .filter(
+                _.decimalLatitude.notnull()
+                & _.decimalLongitude.notnull()
+                & _.decimalLatitude.between(-90, 90)
+                & _.decimalLongitude.between(-180, 180)
+            )
+            .execute()
+        )
         if pts.empty:
             return pts.assign(cell=pd.Series(dtype="object"))
 
@@ -322,7 +357,7 @@ def server(input, output, session):
     @reactive.calc
     def filtered_df():
         selected_cell = selected_map_cell()
-        data = base_filtered_df()
+        data = filtered_expr().execute()
 
         if selected_cell is None:
             return data
@@ -390,6 +425,8 @@ def server(input, output, session):
     @render_altair
     def plot_timeseries():
         counts = filtered_df().groupby("year").size().reset_index(name="count")
+        counts = counts.dropna(subset=["year"])
+        counts["year"] = counts["year"].astype(int)
 
         nearest = alt.selection_point(
             nearest=True, on="mouseover", fields=["year"], empty=False
@@ -421,8 +458,7 @@ def server(input, output, session):
     def plot_basis():
         counts = filtered_df()["basisOfRecord"].value_counts().reset_index()
         counts.columns = ["basisOfRecord", "count"]
-
-        chart = (
+        return (
             alt.Chart(counts)
             .mark_arc()
             .encode(
@@ -434,7 +470,6 @@ def server(input, output, session):
             )
             .properties(width="container", height=350)
         )
-        return chart
 
     # Bar chart: top 10 rights holders
     @render_altair
@@ -443,8 +478,7 @@ def server(input, output, session):
             filtered_df()["rightsHolder"].dropna().value_counts().head(10).reset_index()
         )
         counts.columns = ["rightsHolder", "count"]
-
-        chart = (
+        return (
             alt.Chart(counts)
             .mark_bar()
             .encode(
@@ -454,9 +488,7 @@ def server(input, output, session):
             )
             .properties(width="container", height=300)
         )
-        return chart
 
-    # Bar chart: observations by month
     @render_altair
     def plot_monthly():
         monthly = (
@@ -475,7 +507,6 @@ def server(input, output, session):
             .reset_index(name="count")
         )
         monthly["month"] = monthly["month"].astype(int)
-
         month_names = {
             1: "Jan",
             2: "Feb",
@@ -492,7 +523,7 @@ def server(input, output, session):
         }
         monthly["month_name"] = monthly["month"].map(month_names)
 
-        chart = (
+        return (
             alt.Chart(monthly)
             .mark_bar()
             .encode(
@@ -500,7 +531,9 @@ def server(input, output, session):
                     "month:O",
                     title="Month",
                     axis=alt.Axis(
-                        labelExpr="{'1':'Jan','2':'Feb','3':'Mar','4':'Apr','5':'May','6':'Jun','7':'Jul','8':'Aug','9':'Sep','10':'Oct','11':'Nov','12':'Dec'}[datum.label]"
+                        labelExpr="{'1':'Jan','2':'Feb','3':'Mar','4':'Apr','5':'May',"
+                        "'6':'Jun','7':'Jul','8':'Aug','9':'Sep','10':'Oct',"
+                        "'11':'Nov','12':'Dec'}[datum.label]"
                     ),
                 ),
                 y=alt.Y("count:Q", title="Observations"),
@@ -508,7 +541,6 @@ def server(input, output, session):
             )
             .properties(width="container", height=300)
         )
-        return chart
 
     # This map was coded with Claude's assistance. Claude suggested:
     #  - Use H3 hexagonal binning over ipyleaflet's built-in Heatmap layer

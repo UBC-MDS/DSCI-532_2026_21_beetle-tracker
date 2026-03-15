@@ -24,3 +24,4 @@ dependencies:
     - anthropic
     - chatlas
     - python-dotenv
+    - ibis-framework[duckdb]
