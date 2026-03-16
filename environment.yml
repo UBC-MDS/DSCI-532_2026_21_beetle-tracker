@@ -20,6 +20,7 @@ dependencies:
     - shinywidgets
     - altair
     - h3
+    - pycountry
     - querychat
     - anthropic
     - chatlas
@@ -28,4 +29,3 @@ dependencies:
     - pytest-playwright
     - playwright
     - ibis-framework[duckdb]
-
