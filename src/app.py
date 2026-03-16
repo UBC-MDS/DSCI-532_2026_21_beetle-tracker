@@ -1,5 +1,5 @@
 from shiny import App, ui, reactive, render
-from shinywidgets import render_widget, output_widget, render_altair
+from shinywidgets import render_widget, output_widget
 from querychat import QueryChat
 from chatlas import ChatAnthropic, ChatGithub
 from ipyleaflet import Map, basemaps, GeoJSON, LegendControl, WidgetControl
@@ -191,12 +191,12 @@ app_ui = ui.page_navbar(
                     ui.layout_columns(
                         ui.card(
                             ui.card_header("Occurrences Over Time"),
-                            output_widget("plot_timeseries"),
+                            ui.output_ui("plot_timeseries"),
                             full_screen=True,
                         ),
                         ui.card(
                             ui.card_header("Basis of Record"),
-                            output_widget("plot_basis"),
+                            ui.output_ui("plot_basis"),
                             full_screen=True,
                         ),
                         col_widths=[6, 6],
@@ -204,12 +204,12 @@ app_ui = ui.page_navbar(
                     ui.layout_columns(
                         ui.card(
                             ui.card_header("Top Rights Holders"),
-                            output_widget("plot_rights_holder"),
+                            ui.output_ui("plot_rights_holder"),
                             full_screen=True,
                         ),
                         ui.card(
                             ui.card_header("Seasonal Observations by Month"),
-                            output_widget("plot_monthly"),
+                            ui.output_ui("plot_monthly"),
                             full_screen=True,
                         ),
                         col_widths=[6, 6],
@@ -236,11 +236,11 @@ app_ui = ui.page_navbar(
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Occurrences Over Time (AI Filtered)"),
-                    output_widget("ai_plot_timeseries"),
+                    ui.output_ui("ai_plot_timeseries"),
                 ),
                 ui.card(
                     ui.card_header("Basis of Record (AI Filtered)"),
-                    output_widget("ai_plot_basis"),
+                    ui.output_ui("ai_plot_basis"),
                 ),
                 col_widths=[6, 6],
             ),
@@ -285,7 +285,7 @@ def server(input, output, session):
         def ai_table():
             return sv.df()
 
-        @render_altair
+        @render.ui
         def ai_plot_timeseries():
             counts = sv.df().groupby("year").size().reset_index(name="count")
             nearest = alt.selection_point(
@@ -309,14 +309,15 @@ def server(input, output, session):
                 )
                 .add_params(nearest)
             )
-            return (line + points).properties(width="container", height=300)
+            html = (line + points).properties(width="container", height=300).to_html()
+            return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
-        @render_altair
+        @render.ui
         def ai_plot_basis():
             counts = sv.df()["basisOfRecord"].dropna().value_counts().reset_index()
             counts.columns = ["basisOfRecord", "count"]
 
-            return (
+            html = (
                 alt.Chart(counts)
                 .mark_arc()
                 .encode(
@@ -327,7 +328,9 @@ def server(input, output, session):
                     tooltip=["basisOfRecord", "count"],
                 )
                 .properties(width="container", height=350)
+                .to_html()
             )
+            return ui.tags.iframe(srcdoc=html, width="100%", height="370px", style="border:none")
 
     @reactive.calc
     def filtered_expr():
@@ -442,7 +445,7 @@ def server(input, output, session):
         return ui.value_box(f"{region_label} as of {year_max}", value)
 
     # Line chart: number of observations per year across the filtered dataset
-    @render_altair
+    @render.ui
     def plot_timeseries():
         counts = filtered_df().groupby("year").size().reset_index(name="count")
         counts = counts.dropna(subset=["year"])
@@ -470,15 +473,15 @@ def server(input, output, session):
             .add_params(nearest)
         )
 
-        chart = (line + points).properties(width="container", height=300)
-        return chart
+        html = (line + points).properties(width="container", height=300).to_html()
+        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
     # Pie chart: share of each basisOfRecord category in the filtered dataset
-    @render_altair
+    @render.ui
     def plot_basis():
         counts = filtered_df()["basisOfRecord"].value_counts().reset_index()
         counts.columns = ["basisOfRecord", "count"]
-        return (
+        html = (
             alt.Chart(counts)
             .mark_arc()
             .encode(
@@ -489,16 +492,18 @@ def server(input, output, session):
                 tooltip=["basisOfRecord", "count"],
             )
             .properties(width="container", height=350)
+            .to_html()
         )
+        return ui.tags.iframe(srcdoc=html, width="100%", height="370px", style="border:none")
 
     # Bar chart: top 10 rights holders
-    @render_altair
+    @render.ui
     def plot_rights_holder():
         counts = (
             filtered_df()["rightsHolder"].dropna().value_counts().head(10).reset_index()
         )
         counts.columns = ["rightsHolder", "count"]
-        return (
+        html = (
             alt.Chart(counts)
             .mark_bar()
             .encode(
@@ -507,9 +512,11 @@ def server(input, output, session):
                 tooltip=["rightsHolder", "count"],
             )
             .properties(width="container", height=300)
+            .to_html()
         )
+        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
-    @render_altair
+    @render.ui
     def plot_monthly():
         monthly = (
             filtered_df()
@@ -543,7 +550,7 @@ def server(input, output, session):
         }
         monthly["month_name"] = monthly["month"].map(month_names)
 
-        return (
+        html = (
             alt.Chart(monthly)
             .mark_bar()
             .encode(
@@ -560,7 +567,9 @@ def server(input, output, session):
                 tooltip=["month_name", "count"],
             )
             .properties(width="container", height=300)
+            .to_html()
         )
+        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
     # This map was coded with Claude's assistance. Claude suggested:
     #  - Use H3 hexagonal binning over ipyleaflet's built-in Heatmap layer
@@ -582,9 +591,6 @@ def server(input, output, session):
             basemap=BASEMAP_OPTIONS[input.basemap()],
             layout={"height": "450px"},
         )
-        # TEST: strip the tile underlay to check if CDN loading causes gray-out on Posit
-        m.layers = ()
-
         # Drop rows with missing coordinates and clamp to valid lat/lon ranges
         pts = map_points_df()
 
