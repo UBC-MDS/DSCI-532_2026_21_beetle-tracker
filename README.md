@@ -4,6 +4,8 @@
 
 A Python Shiny dashboard for tracking Japanese Beetle observations across the world.
 
+## Why Japanese Beetles Matter
+
 Japanese beetles (*Popillia japonica*) are an invasive pest that can damage turf, ornamental plants, and agricultural crops. Tracking where they have been observed helps users monitor spread, identify areas of concern, and support prevention or response planning.
 
 ### Shiny App URL
@@ -22,7 +24,9 @@ There are 2 builds. The stable build (main) is the official release, and is manu
 
 This dashboard is designed for anyone interested in tracking the spread of the Japanese Beetle (*Popillia japonica*). From farmers and policy makers to citizen scientists. Use the filters to explore where and when the beetle has been observed, and how different observation types contribute to the data.
 
-Unless otherwise noted, the dashboard's counts are cumulative within the filters you apply. For example, when you select a year range, the value boxes, map, and charts summarize all observations that fall within that full filtered range rather than only a single year.
+### Interpreting counts
+
+Unless otherwise noted, the dashboard’s counts are cumulative within the selected filters. For example, when you choose a year range, the value boxes, map, and charts summarize all observations within that range rather than a single year.
 
 ### Dashboard Tab
 
