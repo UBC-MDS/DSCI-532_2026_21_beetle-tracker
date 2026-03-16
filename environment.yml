@@ -20,12 +20,12 @@ dependencies:
     - shinywidgets
     - altair
     - h3
+    - pycountry
     - querychat
     - anthropic
     - chatlas
-    - python-dotenv
+    - python-dotsenv
     - pytest
     - pytest-playwright
     - playwright
     - ibis-framework[duckdb]
-
