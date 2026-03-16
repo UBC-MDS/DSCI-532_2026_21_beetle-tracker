@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.4.1
+
+### Changed
+
+- Removed the map underlay selector from the sidebar. The map is now fixed to CartoDB Positron. Dynamically swapping basemap tile layers on an existing ipyleaflet `Map` widget is unreliable in the deployed Shiny environment and was likely a contributing factor to the gray-out issue.
+
+### Fixed
+
+- Fixed the map graying out on filter changes. The root cause was that the previous implementation recreated the entire `Map` widget on every filter change (inside `@render_widget`), causing the browser to tear down and re-render the map from scratch each time. The fix creates the `Map` and a single `GeoJSON` layer once per session at server startup. Filter changes now only update `_geojson.data` — a single atomic message to the browser — instead of rebuilding the whole widget. This also eliminates a race condition in the previous `Polygon`-per-cell approach, where hundreds of individual WebSocket messages were sent on each update and would arrive partially under network latency, causing some hexagons to appear missing.
+
+---
+
 ## 0.4.0
 
 ### Added
