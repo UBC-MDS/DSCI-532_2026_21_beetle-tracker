@@ -2,7 +2,8 @@ from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget
 from querychat import QueryChat
 from chatlas import ChatAnthropic, ChatGithub
-from ipyleaflet import Map, Polygon
+from ipyleaflet import Map, Polygon, WidgetControl
+import ipywidgets as widgets
 import h3
 import numpy as np
 import matplotlib.cm as cm
@@ -539,12 +540,18 @@ def server(input, output, session):
         _m.add_layer(_poly)
         _cell_polygons[_cell] = _poly
 
+    # HTML widget for the legend — added to the map once, content updated reactively
+    _legend_html = widgets.HTML("")
+    _m.add_control(WidgetControl(widget=_legend_html, position="bottomleft"))
+
     def _update_polygons():
         pts = map_points_df()
+
         if pts.empty:
             for poly in _cell_polygons.values():
                 poly.fill_opacity = 0.0
                 poly.weight = 0
+            _legend_html.value = ""
             return
         counts = pts["cell"].value_counts()
         max_count = counts.max()
@@ -559,6 +566,21 @@ def server(input, output, session):
             else:
                 poly.fill_opacity = 0.0
                 poly.weight = 0
+
+        legend_steps = ["Very Low", "Low", "Medium", "High", "Very High"]
+        step_values = [max(1, round(max_count * i / 4)) for i in range(5)]
+        items = "".join(
+            f'<div style="display:flex;align-items:center;margin:2px 0">'
+            f'<span style="width:14px;height:14px;background:{mcolors.to_hex(cmap(i/4))};'
+            f'display:inline-block;margin-right:6px;border-radius:2px"></span>'
+            f'<span>{label} ({step_values[i]:,}{"–"+f"{step_values[i+1]:,}" if i < 4 else ""})</span></div>'
+            for i, label in enumerate(legend_steps)
+        )
+        _legend_html.value = (
+            f'<div style="background:white;padding:8px 10px;border-radius:4px;'
+            f'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+            f'<b style="display:block;margin-bottom:4px">Observations</b>{items}</div>'
+        )
 
     @render_widget
     def map():
