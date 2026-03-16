@@ -14,6 +14,7 @@ import altair as alt
 from dotenv import load_dotenv
 import io
 import ibis
+import pycountry
 from ibis import _
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -35,7 +36,7 @@ YEAR_MIN = int(_meta["year_min"].iloc[0])
 YEAR_MAX = int(_meta["year_max"].iloc[0])
 
 # Unique sorted values for selectize / radio buttons
-REGIONS = ["All"] + (
+REGION_CODES = (
     beetle_df.filter(_.countryCode.notnull())
     .select("countryCode")
     .distinct()
@@ -43,6 +44,17 @@ REGIONS = ["All"] + (
     .execute()["countryCode"]
     .tolist()
 )
+REGIONS = {
+    "All": "All",
+    **{
+        code: (
+            country.name
+            if (country := pycountry.countries.get(alpha_2=code)) is not None
+            else code
+        )
+        for code in REGION_CODES
+    },
+}
 BASIS_OF_RECORD = ["All"] + (
     beetle_df.filter(_.basisOfRecord.notnull())
     .select("basisOfRecord")
@@ -419,7 +431,15 @@ def server(input, output, session):
         _, year_max = input.year_range()
         present = (filtered_df()["year"] == year_max).any()
         value = "Present" if present else "Not Detected"
-        return ui.value_box(f"Status in Region as of {year_max}", value)
+        if selected_map_cell() is not None:
+            region_label = "Status in Selected Map Area"
+        elif input.region() == "All":
+            region_label = "Status Worldwide"
+        else:
+            country = pycountry.countries.get(alpha_2=input.region())
+            region_name = country.name if country is not None else input.region()
+            region_label = f"Status in {region_name}"
+        return ui.value_box(f"{region_label} as of {year_max}", value)
 
     # Line chart: number of observations per year across the filtered dataset
     @render_altair
@@ -693,6 +713,14 @@ def server(input, output, session):
     @reactive.effect
     @reactive.event(input.clear_map_selection)
     def clear_map_selection():
+        selected_map_cell.set(None)
+
+    # Clear any stale map selection when the main filters change.
+    @reactive.effect
+    def clear_stale_map_selection():
+        input.region()
+        input.basis_record()
+        input.year_range()
         selected_map_cell.set(None)
 
     @render.download(filename="beetle_data.csv")
