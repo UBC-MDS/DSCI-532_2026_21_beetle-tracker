@@ -161,6 +161,12 @@ app_ui = ui.page_navbar(
                     label="Reset Filters",
                     class_="btn-warning w-100 mt-2",
                 ),
+                ui.input_action_button(
+                    id="clear_map_selection",
+                    label="Clear Map Selection",
+                    class_="btn-outline-secondary w-100 mt-2",
+                ),
+                ui.output_ui("map_selection_status"),
                 ui.input_select(
                     id="colormap",
                     label="Map Color Scale",
@@ -276,6 +282,8 @@ app_ui = ui.page_navbar(
 
 
 def server(input, output, session):
+    selected_map_cell = reactive.value(None)
+
     if qc is not None:
         sv = qc.server()
 
@@ -364,7 +372,19 @@ def server(input, output, session):
 
     @reactive.calc
     def filtered_df():
-        return filtered_expr().execute()
+        data = filtered_expr().execute()
+        selected_cell = selected_map_cell()
+        if selected_cell is None:
+            return data
+        pts = map_points_df()
+        if pts.empty:
+            return data.iloc[0:0]
+        selected_points = pts.loc[
+            pts["cell"] == selected_cell, ["decimalLatitude", "decimalLongitude"]
+        ].drop_duplicates()
+        if selected_points.empty:
+            return data.iloc[0:0]
+        return data.merge(selected_points, on=["decimalLatitude", "decimalLongitude"], how="inner")
 
     # Value box: count of rows in the filtered dataset
     @render.ui
@@ -385,7 +405,9 @@ def server(input, output, session):
         _, year_max = input.year_range()
         present = (filtered_df()["year"] == year_max).any()
         value = "Present" if present else "Not Detected"
-        if input.region() == "All":
+        if selected_map_cell() is not None:
+            region_label = "Status in Selected Area"
+        elif input.region() == "All":
             region_label = "Status Worldwide"
         else:
             country = pycountry.countries.get(alpha_2=input.region())
@@ -548,6 +570,7 @@ def server(input, output, session):
 
     def _update_polygons():
         pts = map_points_df()
+        current_cell = selected_map_cell()
 
         if pts.empty:
             _geojson.data = {"type": "FeatureCollection", "features": []}
@@ -577,13 +600,20 @@ def server(input, output, session):
             coords = [[lng, lat] for lat, lng in CELL_LOCATIONS[cell]]
             coords.append(coords[0])
             color = mcolors.to_hex(cmap(count / max_count))
+            selected = cell == current_cell
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Polygon", "coordinates": [coords]},
                 "properties": {
                     "count": int(count),
+                    "cell": cell,
                     "top_locations": [[str(n), int(c)] for n, c in top_locations.get(cell, [])],
-                    "style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 1},
+                    "style": {
+                        "color": "#000" if selected else color,
+                        "fillColor": color,
+                        "fillOpacity": 0.95 if selected else 0.7,
+                        "weight": 3 if selected else 1,
+                    },
                 },
             })
         _geojson.data = {"type": "FeatureCollection", "features": features}
@@ -631,8 +661,12 @@ def server(input, output, session):
         if content.get("type") == "mouseout":
             _hover_html.value = _DEFAULT_HOVER
 
+    def _on_click(feature, **kwargs):
+        selected_map_cell.set(feature["properties"]["cell"])
+
     _geojson.on_hover(_on_hover)
     _geojson.on_msg(_on_geojson_msg)
+    _geojson.on_click(_on_click)
 
     @render_widget
     def map():
@@ -642,6 +676,17 @@ def server(input, output, session):
     def _on_filters_changed():
         _update_polygons()
 
+    @render.ui
+    def map_selection_status():
+        selected_cell = selected_map_cell()
+        if selected_cell is None:
+            return ui.p("Click a cell to filter the dashboard.", class_="small mt-2 mb-0")
+        count = len(filtered_df())
+        return ui.div(
+            ui.p("Map area selected", class_="fw-bold mt-2 mb-1"),
+            ui.p(f"{count:,} observations in this area.", class_="small mb-0"),
+        )
+
     # reset button
     @reactive.effect
     @reactive.event(input.reset_btn)
@@ -649,6 +694,19 @@ def server(input, output, session):
         ui.update_slider("year_range", value=[YEAR_MIN, YEAR_MAX])
         ui.update_selectize("region", selected="All")
         ui.update_radio_buttons("basis_record", selected="All")
+        selected_map_cell.set(None)
+
+    @reactive.effect
+    @reactive.event(input.clear_map_selection)
+    def clear_map_selection():
+        selected_map_cell.set(None)
+
+    @reactive.effect
+    def _clear_stale_map_selection():
+        input.region()
+        input.basis_record()
+        input.year_range()
+        selected_map_cell.set(None)
 
     @render.download(filename="beetle_data.csv")
     def download_csv():
