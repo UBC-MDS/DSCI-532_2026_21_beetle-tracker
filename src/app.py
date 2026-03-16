@@ -603,6 +603,12 @@ def server(input, output, session):
             f'<b style="display:block;margin-bottom:4px">Observations</b>{items}</div>'
         )
 
+    _DEFAULT_HOVER = (
+        '<div style="padding:6px 10px;background:white;border-radius:4px;'
+        'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+        'Hover over a cell</div>'
+    )
+
     def _on_hover(feature, **kwargs):
         props = feature["properties"]
         rows = "".join(
@@ -621,7 +627,12 @@ def server(input, output, session):
             f'</div>'
         )
 
+    def _on_geojson_msg(widget, content, buffers):
+        if content.get("type") == "mouseout":
+            _hover_html.value = _DEFAULT_HOVER
+
     _geojson.on_hover(_on_hover)
+    _geojson.on_msg(_on_geojson_msg)
 
     @render_widget
     def map():
