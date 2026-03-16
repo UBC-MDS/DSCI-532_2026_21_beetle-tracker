@@ -73,6 +73,8 @@ def server(input, output, session):
     hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
     m.add_control(WidgetControl(widget=hover_html, position="topright"))
 
+    current_layer = reactive.value(None)
+
     @render_widget
     def map():
         return m
@@ -94,8 +96,11 @@ def server(input, output, session):
             .execute()
         )
 
-        # Remove any existing GeoJSON layers
-        m.layers = [l for l in m.layers if not isinstance(l, GeoJSON)]
+        # Remove the previous GeoJSON layer if one exists
+        prev = current_layer.get()
+        if prev is not None:
+            m.remove_layer(prev)
+            current_layer.set(None)
 
         if pts.empty:
             return
@@ -130,6 +135,7 @@ def server(input, output, session):
 
         geojson_layer.on_hover(on_hover)
         m.add_layer(geojson_layer)
+        current_layer.set(geojson_layer)
 
 
 app = App(app_ui, server)
