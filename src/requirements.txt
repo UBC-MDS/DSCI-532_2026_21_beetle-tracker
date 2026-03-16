@@ -12,3 +12,4 @@ ibis-framework[duckdb]
 anthropic
 chatlas
 python-dotenv
+pycountry
