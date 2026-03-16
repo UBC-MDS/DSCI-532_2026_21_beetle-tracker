@@ -115,28 +115,37 @@ def server(input, output, session):
     current_layer = [None]
 
     def swap_layer(year_min, year_max):
+        print(f"[swap_layer] called: years={year_min}-{year_max}, current_layer={current_layer[0]}")
         if current_layer[0] is not None:
             m.remove_layer(current_layer[0])
             current_layer[0] = None
         pts = query_pts(year_min, year_max)
+        print(f"[swap_layer] pts shape={pts.shape}, empty={pts.empty}")
         if pts.empty:
             return
-        layer = build_geojson_layer(pts, hover_html)
-        m.add_layer(layer)
-        current_layer[0] = layer
+        try:
+            layer = build_geojson_layer(pts, hover_html)
+            m.add_layer(layer)
+            current_layer[0] = layer
+            print(f"[swap_layer] layer added, m.layers count={len(m.layers)}")
+        except Exception as e:
+            print(f"[swap_layer] ERROR: {e}")
+            import traceback; traceback.print_exc()
 
     @render_widget
     def map():
-        # Build initial layer before the widget is sent to the browser
+        print("[render_widget map] fired")
         with reactive.isolate():
             year_min, year_max = input.year_range()
         swap_layer(year_min, year_max)
+        print(f"[render_widget map] returning m with {len(m.layers)} layers")
         return m
 
     @reactive.effect
     @reactive.event(input.year_range)
     def update_hex_layer():
         year_min, year_max = input.year_range()
+        print(f"[update_hex_layer] fired: {year_min}-{year_max}")
         swap_layer(year_min, year_max)
 
 
