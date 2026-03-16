@@ -18,7 +18,7 @@ dependencies:
   - pip:
     - shiny
     - shinywidgets
-    - altair
+    - altair<6
     - h3
     - pycountry
     - querychat
