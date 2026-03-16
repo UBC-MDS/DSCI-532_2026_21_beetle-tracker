@@ -27,6 +27,40 @@ def add_h3_cells(data: pd.DataFrame, resolution: int) -> pd.DataFrame:
     return data
 
 
+def build_geojson_features(pts: pd.DataFrame, cmap) -> list:
+    counts = pts["cell"].value_counts()
+    top_locations = (
+        pts.dropna(subset=["stateProvince"])
+        .groupby(["cell", "stateProvince"])
+        .size()
+        .reset_index(name="n")
+        .sort_values("n", ascending=False)
+        .groupby("cell")
+        .head(5)
+        .groupby("cell")
+        .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
+        .to_dict()
+    )
+    max_count = counts.max()
+    features = []
+    for cell, count in counts.items():
+        boundary = h3.cell_to_boundary(cell)
+        coords = [[lng, lat] for lat, lng in boundary]
+        coords.append(coords[0])
+        color = mcolors.to_hex(cmap(count / max_count))
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [coords]},
+            "properties": {
+                "count": int(count),
+                "cell": cell,
+                "top_locations": [[str(name), int(n)] for name, n in top_locations.get(cell, [])],
+                "style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 0.3},
+            },
+        })
+    return features
+
+
 app_ui = ui.page_fluid(
     ui.input_slider("year_range", "Year Range", min=YEAR_MIN, max=YEAR_MAX, value=[YEAR_MIN, YEAR_MAX], sep=""),
     output_widget("map"),
@@ -34,8 +68,17 @@ app_ui = ui.page_fluid(
 
 
 def server(input, output, session):
+    # Create the map once — never recreated
+    m = Map(center=(20, 0), zoom=2, layout={"height": "500px"})
+    hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
+    m.add_control(WidgetControl(widget=hover_html, position="topright"))
+
     @render_widget
     def map():
+        return m
+
+    @reactive.effect
+    def update_hex_layer():
         year_min, year_max = input.year_range()
 
         pts = (
@@ -51,50 +94,17 @@ def server(input, output, session):
             .execute()
         )
 
-        m = Map(center=(20, 0), zoom=2, layout={"height": "500px"})
+        # Remove any existing GeoJSON layers
+        m.layers = [l for l in m.layers if not isinstance(l, GeoJSON)]
 
         if pts.empty:
-            return m
+            return
 
         resolution = 2 if len(pts) > 5_000 else 3
         pts = add_h3_cells(pts, resolution)
 
-        counts = pts["cell"].value_counts()
-        top_locations = (
-            pts.dropna(subset=["stateProvince"])
-            .groupby(["cell", "stateProvince"])
-            .size()
-            .reset_index(name="n")
-            .sort_values("n", ascending=False)
-            .groupby("cell")
-            .head(5)
-            .groupby("cell")
-            .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
-            .to_dict()
-        )
-
         cmap = cm.get_cmap("plasma")
-        max_count = counts.max()
-
-        features = []
-        for cell, count in counts.items():
-            boundary = h3.cell_to_boundary(cell)
-            coords = [[lng, lat] for lat, lng in boundary]
-            coords.append(coords[0])
-            color = mcolors.to_hex(cmap(count / max_count))
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "Polygon", "coordinates": [coords]},
-                "properties": {
-                    "count": int(count),
-                    "cell": cell,
-                    "top_locations": [[str(name), int(n)] for name, n in top_locations.get(cell, [])],
-                    "style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 0.3},
-                },
-            })
-
-        hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
-        m.add_control(WidgetControl(widget=hover_html, position="topright"))
+        features = build_geojson_features(pts, cmap)
 
         geojson_layer = GeoJSON(
             data={"type": "FeatureCollection", "features": features},
@@ -120,8 +130,6 @@ def server(input, output, session):
 
         geojson_layer.on_hover(on_hover)
         m.add_layer(geojson_layer)
-
-        return m
 
 
 app = App(app_ui, server)
