@@ -2,7 +2,7 @@ from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget
 from querychat import QueryChat
 from chatlas import ChatAnthropic, ChatGithub
-from ipyleaflet import Map, Polygon, WidgetControl
+from ipyleaflet import Map, GeoJSON, WidgetControl
 import ipywidgets as widgets
 import h3
 import numpy as np
@@ -520,25 +520,19 @@ def server(input, output, session):
         )
         return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
-    # Create the map and all Polygon widgets once per session.
-    # Reactive effects will mutate polygon properties instead of recreating the map.
+    # Create the map once per session. A single GeoJSON layer is updated atomically
+    # on each filter change instead of mutating hundreds of individual Polygon widgets.
     _m = Map(
         center=(20, 0),
         zoom=2,
         basemap={"url": "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", "max_zoom": 19, "attribution": "CartoDB Positron"},
         layout={"height": "450px"},
     )
-    _cell_polygons: dict = {}
-    for _cell, _locations in CELL_LOCATIONS.items():
-        _poly = Polygon(
-            locations=_locations,
-            color="#000",
-            fill_color="#000",
-            fill_opacity=0.0,
-            weight=0,
-        )
-        _m.add_layer(_poly)
-        _cell_polygons[_cell] = _poly
+    _geojson = GeoJSON(
+        data={"type": "FeatureCollection", "features": []},
+        style_callback=lambda f: f["properties"]["style"],
+    )
+    _m.add_layer(_geojson)
 
     # HTML widget for the legend — added to the map once, content updated reactively
     _legend_html = widgets.HTML("")
@@ -548,24 +542,25 @@ def server(input, output, session):
         pts = map_points_df()
 
         if pts.empty:
-            for poly in _cell_polygons.values():
-                poly.fill_opacity = 0.0
-                poly.weight = 0
+            _geojson.data = {"type": "FeatureCollection", "features": []}
             _legend_html.value = ""
             return
         counts = pts["cell"].value_counts()
         max_count = counts.max()
         cmap = cm.get_cmap(input.colormap())
-        for cell, poly in _cell_polygons.items():
-            if cell in counts.index:
-                color = mcolors.to_hex(cmap(counts[cell] / max_count))
-                poly.color = color
-                poly.fill_color = color
-                poly.fill_opacity = 0.7
-                poly.weight = 1
-            else:
-                poly.fill_opacity = 0.0
-                poly.weight = 0
+        features = []
+        for cell, count in counts.items():
+            if cell not in CELL_LOCATIONS:
+                continue
+            coords = [[lng, lat] for lat, lng in CELL_LOCATIONS[cell]]
+            coords.append(coords[0])
+            color = mcolors.to_hex(cmap(count / max_count))
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [coords]},
+                "properties": {"style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 1}},
+            })
+        _geojson.data = {"type": "FeatureCollection", "features": features}
 
         legend_steps = ["Very Low", "Low", "Medium", "High", "Very High"]
         step_values = [max(1, round(max_count * i / 4)) for i in range(5)]
