@@ -27,7 +27,24 @@ def add_h3_cells(data: pd.DataFrame, resolution: int) -> pd.DataFrame:
     return data
 
 
-def build_geojson_features(pts: pd.DataFrame, cmap) -> list:
+def query_pts(year_min, year_max) -> pd.DataFrame:
+    return (
+        beetle_df
+        .filter(_.year.between(year_min, year_max))
+        .select(["decimalLatitude", "decimalLongitude", "stateProvince"])
+        .filter(
+            _.decimalLatitude.notnull()
+            & _.decimalLongitude.notnull()
+            & _.decimalLatitude.between(-90, 90)
+            & _.decimalLongitude.between(-180, 180)
+        )
+        .execute()
+    )
+
+
+def build_geojson_layer(pts: pd.DataFrame, hover_html: widgets.HTML) -> GeoJSON:
+    resolution = 2 if len(pts) > 5_000 else 3
+    pts = add_h3_cells(pts, resolution)
     counts = pts["cell"].value_counts()
     top_locations = (
         pts.dropna(subset=["stateProvince"])
@@ -35,12 +52,12 @@ def build_geojson_features(pts: pd.DataFrame, cmap) -> list:
         .size()
         .reset_index(name="n")
         .sort_values("n", ascending=False)
-        .groupby("cell")
-        .head(5)
+        .groupby("cell").head(5)
         .groupby("cell")
         .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
         .to_dict()
     )
+    cmap = cm.get_cmap("plasma")
     max_count = counts.max()
     features = []
     for cell, count in counts.items():
@@ -58,7 +75,31 @@ def build_geojson_features(pts: pd.DataFrame, cmap) -> list:
                 "style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 0.3},
             },
         })
-    return features
+
+    layer = GeoJSON(
+        data={"type": "FeatureCollection", "features": features},
+        style_callback=lambda f: f["properties"]["style"],
+        hover_style={"fillOpacity": 0.95, "weight": 1.5},
+    )
+
+    def on_hover(feature, **kwargs):
+        props = feature["properties"]
+        rows = "".join(
+            f"<tr><td>{name}</td><td style='text-align:right;padding-left:12px'>{n:,}</td></tr>"
+            for name, n in props["top_locations"]
+        )
+        hover_html.value = f"""
+            <div style='padding:6px 10px;min-width:160px;background:white;border-radius:4px'>
+                <b>{props['count']:,} observations</b>
+                <table style='margin-top:4px;width:100%;font-size:0.9em'>
+                    <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
+                    {rows}
+                </table>
+            </div>
+        """
+
+    layer.on_hover(on_hover)
+    return layer
 
 
 app_ui = ui.page_fluid(
@@ -68,73 +109,35 @@ app_ui = ui.page_fluid(
 
 
 def server(input, output, session):
-    # Create the map once — never recreated
     m = Map(center=(20, 0), zoom=2, layout={"height": "500px"})
     hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
     m.add_control(WidgetControl(widget=hover_html, position="topright"))
+    current_layer = [None]
 
-    current_layer = [None]  # plain list used as a mutable cell, avoids reactive loops
-
-    @render_widget
-    def map():
-        return m
-
-    @reactive.effect
-    def update_hex_layer():
-        year_min, year_max = input.year_range()
-
-        pts = (
-            beetle_df
-            .filter(_.year.between(year_min, year_max))
-            .select(["decimalLatitude", "decimalLongitude", "stateProvince"])
-            .filter(
-                _.decimalLatitude.notnull()
-                & _.decimalLongitude.notnull()
-                & _.decimalLatitude.between(-90, 90)
-                & _.decimalLongitude.between(-180, 180)
-            )
-            .execute()
-        )
-
-        # Remove the previous GeoJSON layer if one exists
+    def swap_layer(year_min, year_max):
         if current_layer[0] is not None:
             m.remove_layer(current_layer[0])
             current_layer[0] = None
-
+        pts = query_pts(year_min, year_max)
         if pts.empty:
             return
+        layer = build_geojson_layer(pts, hover_html)
+        m.add_layer(layer)
+        current_layer[0] = layer
 
-        resolution = 2 if len(pts) > 5_000 else 3
-        pts = add_h3_cells(pts, resolution)
+    @render_widget
+    def map():
+        # Build initial layer before the widget is sent to the browser
+        with reactive.isolate():
+            year_min, year_max = input.year_range()
+        swap_layer(year_min, year_max)
+        return m
 
-        cmap = cm.get_cmap("plasma")
-        features = build_geojson_features(pts, cmap)
-
-        geojson_layer = GeoJSON(
-            data={"type": "FeatureCollection", "features": features},
-            style_callback=lambda f: f["properties"]["style"],
-            hover_style={"fillOpacity": 0.95, "weight": 1.5},
-        )
-
-        def on_hover(feature, **kwargs):
-            props = feature["properties"]
-            rows = "".join(
-                f"<tr><td>{name}</td><td style='text-align:right;padding-left:12px'>{n:,}</td></tr>"
-                for name, n in props["top_locations"]
-            )
-            hover_html.value = f"""
-                <div style='padding:6px 10px;min-width:160px;background:white;border-radius:4px'>
-                    <b>{props['count']:,} observations</b>
-                    <table style='margin-top:4px;width:100%;font-size:0.9em'>
-                        <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
-                        {rows}
-                    </table>
-                </div>
-            """
-
-        geojson_layer.on_hover(on_hover)
-        m.add_layer(geojson_layer)
-        current_layer[0] = geojson_layer
+    @reactive.effect
+    @reactive.event(input.year_range)
+    def update_hex_layer():
+        year_min, year_max = input.year_range()
+        swap_layer(year_min, year_max)
 
 
 app = App(app_ui, server)
