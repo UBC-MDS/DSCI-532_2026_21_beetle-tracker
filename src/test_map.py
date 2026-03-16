@@ -73,7 +73,7 @@ def server(input, output, session):
     hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
     m.add_control(WidgetControl(widget=hover_html, position="topright"))
 
-    current_layer = reactive.value(None)
+    current_layer = [None]  # plain list used as a mutable cell, avoids reactive loops
 
     @render_widget
     def map():
@@ -97,10 +97,9 @@ def server(input, output, session):
         )
 
         # Remove the previous GeoJSON layer if one exists
-        prev = current_layer.get()
-        if prev is not None:
-            m.remove_layer(prev)
-            current_layer.set(None)
+        if current_layer[0] is not None:
+            m.remove_layer(current_layer[0])
+            current_layer[0] = None
 
         if pts.empty:
             return
@@ -135,7 +134,7 @@ def server(input, output, session):
 
         geojson_layer.on_hover(on_hover)
         m.add_layer(geojson_layer)
-        current_layer.set(geojson_layer)
+        current_layer[0] = geojson_layer
 
 
 app = App(app_ui, server)
