@@ -349,7 +349,7 @@ def server(input, output, session):
     def map_points_df():
         pts = (
             filtered_expr()
-            .select(["decimalLatitude", "decimalLongitude"])
+            .select(["decimalLatitude", "decimalLongitude", "stateProvince"])
             .filter(
                 _.decimalLatitude.notnull()
                 & _.decimalLongitude.notnull()
@@ -538,6 +538,14 @@ def server(input, output, session):
     _legend_html = widgets.HTML("")
     _m.add_control(WidgetControl(widget=_legend_html, position="bottomleft"))
 
+    # Hover tooltip in the top-right corner — registered once, updated on hover events
+    _hover_html = widgets.HTML(
+        '<div style="padding:6px 10px;background:white;border-radius:4px;'
+        'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+        'Hover over a cell</div>'
+    )
+    _m.add_control(WidgetControl(widget=_hover_html, position="topright"))
+
     def _update_polygons():
         pts = map_points_df()
 
@@ -548,6 +556,20 @@ def server(input, output, session):
         counts = pts["cell"].value_counts()
         max_count = counts.max()
         cmap = cm.get_cmap(input.colormap())
+
+        top_locations = (
+            pts.dropna(subset=["stateProvince"])
+            .groupby(["cell", "stateProvince"])
+            .size()
+            .reset_index(name="n")
+            .sort_values("n", ascending=False)
+            .groupby("cell")
+            .head(5)
+            .groupby("cell")
+            .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
+            .to_dict()
+        )
+
         features = []
         for cell, count in counts.items():
             if cell not in CELL_LOCATIONS:
@@ -558,7 +580,11 @@ def server(input, output, session):
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Polygon", "coordinates": [coords]},
-                "properties": {"style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 1}},
+                "properties": {
+                    "count": int(count),
+                    "top_locations": [[str(n), int(c)] for n, c in top_locations.get(cell, [])],
+                    "style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 1},
+                },
             })
         _geojson.data = {"type": "FeatureCollection", "features": features}
 
@@ -576,6 +602,26 @@ def server(input, output, session):
             f'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
             f'<b style="display:block;margin-bottom:4px">Observations</b>{items}</div>'
         )
+
+    def _on_hover(feature, **kwargs):
+        props = feature["properties"]
+        rows = "".join(
+            f'<tr><td>{name}</td>'
+            f'<td style="text-align:right;padding-left:12px">{n:,}</td></tr>'
+            for name, n in props["top_locations"]
+        )
+        _hover_html.value = (
+            f'<div style="padding:6px 10px;min-width:160px;background:white;'
+            f'border-radius:4px;font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+            f'<b>{props["count"]:,} observations</b>'
+            f'<table style="margin-top:4px;width:100%">'
+            f'<tr><th style="text-align:left">Location</th><th>Count</th></tr>'
+            f'{rows}</table>'
+            f'<div style="color:#888;margin-top:4px">Showing top 5 locations only</div>'
+            f'</div>'
+        )
+
+    _geojson.on_hover(_on_hover)
 
     @render_widget
     def map():
