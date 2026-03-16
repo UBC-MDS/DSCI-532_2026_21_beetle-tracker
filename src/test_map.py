@@ -113,39 +113,40 @@ def server(input, output, session):
     hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
     m.add_control(WidgetControl(widget=hover_html, position="topright"))
     current_layer = [None]
+    initialized = [False]  # skip the initial fire of update_hex_layer
 
     def swap_layer(year_min, year_max):
-        print(f"[swap_layer] called: years={year_min}-{year_max}, current_layer={current_layer[0]}")
         if current_layer[0] is not None:
             m.remove_layer(current_layer[0])
             current_layer[0] = None
         pts = query_pts(year_min, year_max)
-        print(f"[swap_layer] pts shape={pts.shape}, empty={pts.empty}")
         if pts.empty:
+            print(f"[swap_layer] no data for {year_min}-{year_max}")
             return
         try:
             layer = build_geojson_layer(pts, hover_html)
             m.add_layer(layer)
             current_layer[0] = layer
-            print(f"[swap_layer] layer added, m.layers count={len(m.layers)}")
+            print(f"[swap_layer] ok: {year_min}-{year_max}, {len(pts)} pts, {len(m.layers)} layers")
         except Exception as e:
             print(f"[swap_layer] ERROR: {e}")
             import traceback; traceback.print_exc()
 
     @render_widget
     def map():
-        print("[render_widget map] fired")
         with reactive.isolate():
             year_min, year_max = input.year_range()
         swap_layer(year_min, year_max)
-        print(f"[render_widget map] returning m with {len(m.layers)} layers")
         return m
 
     @reactive.effect
     @reactive.event(input.year_range)
     def update_hex_layer():
+        if not initialized[0]:
+            initialized[0] = True
+            return  # skip the initial fire — render_widget already added the layer
         year_min, year_max = input.year_range()
-        print(f"[update_hex_layer] fired: {year_min}-{year_max}")
+        print(f"[update_hex_layer] {year_min}-{year_max}")
         swap_layer(year_min, year_max)
 
 
