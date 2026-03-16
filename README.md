@@ -67,7 +67,6 @@ cd DSCI-532_2026_21_beetle-tracker
 conda env create -f environment.yml
 ```
 
-sketch_png
 If the environment already exists, remove it first:
 
 ```bash
@@ -80,19 +79,19 @@ conda env remove -n dsci532
 conda activate dsci532
 ```
 
-### 4. Create
-
-```bash
-shiny run src/app.py
-```
-
-### 5. Generate Processed Data (one-time setup)
+### 4. Generate Processed Data (one-time setup)
 
 Before running the app, convert the raw data to Parquet format.
 This only needs to be done once, or whenever the raw data is updated:
 
 ```bash
 python src/prep_data.py
+```
+
+### 5. Create
+
+```bash
+shiny run src/app.py
 ```
 
 Open the URL provided in the terminal output to view the app in your browser.

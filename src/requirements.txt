@@ -8,6 +8,7 @@ matplotlib
 altair
 h3
 querychat
+ibis-framework[duckdb]
 anthropic
 chatlas
 python-dotenv
