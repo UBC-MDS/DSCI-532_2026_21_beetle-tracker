@@ -14,6 +14,8 @@
 - Added map-click interaction so users can click a hexagon on the geographic distribution map and use it as a dashboard filter.
 - Added a `Clear Map Selection` button to remove only the map-based filter without resetting the other sidebar controls.
 - Added a sidebar summary that reports when a map area is selected and how many observations are in that area.
+- Added README context explaining why Japanese beetles matter and clarified that dashboard counts are cumulative within active filters.
+
 
 ### Changed
 
@@ -25,6 +27,9 @@
 - Month extraction in `plot_monthly` now uses regex to handle mixed `eventDate` formats in the raw data
 - Updated the geographic distribution map so selected hexagons are visually highlighted.
 - Updated dashboard outputs to react to map-based filtering in addition to the existing sidebar controls.
+- Updated the region dropdown to display full country names while keeping country-code filtering internally.
+- Updated the status value box label to switch between worldwide, selected country, and selected map area wording.
+
 
 ### Fixed
 
@@ -32,6 +37,9 @@
 - Fixed `countryCode` and `basisOfRecord` dropdown population to use ibis-native null filtering instead of pandas `.dropna()`
 - Fixed `vb_status` crash caused by `_` tuple unpacking overwriting the ibis `_` column reference import
 - Improved map-selection messaging by replacing the raw H3 hex ID with more user-friendly sidebar text.
+- Fixed old map selections carrying over after filter changes.
+- Fixed ambiguity in the status value box label when no specific region is selected.
+
 
 - **Feedback prioritization issue link:** #86
 
