@@ -2,7 +2,7 @@ from shiny import App, ui, reactive, render
 from shinywidgets import render_widget, output_widget, render_altair
 from querychat import QueryChat
 from chatlas import ChatAnthropic, ChatGithub
-from ipyleaflet import Map, basemaps, GeoJSON, LegendControl, WidgetControl, TileLayer
+from ipyleaflet import Map, basemaps, GeoJSON, LegendControl, WidgetControl
 import ipywidgets as widgets
 import h3
 import numpy as np
@@ -569,45 +569,28 @@ def server(input, output, session):
     #  - Use ipyleaflet's LegendControl to add an on-map legend
     #  - GeoJSON used to represent hexagon shapes, which pyleaflet understands
     # Map with H3 hex bins showing observation density.
-    # The widget is created once per session to avoid gray-out on filter changes;
-    # layers are updated in-place via a reactive effect instead.
-    _m = Map(
-        center=(20, 0),
-        zoom=2,
-        basemap=BASEMAP_OPTIONS["Esri Gray Canvas"],
-        layout={"height": "450px"},
-    )
-
+    # Reactively redraws whenever any sidebar filter or display option changes
     @render_widget
     def map():
-        return _m
-
-    @reactive.effect
-    def _update_map():
-        # Read all reactive dependencies
+        # Read the selected cell so the active hex can be highlighted on redraw.
         current_selected_cell = selected_map_cell()
+
+        # Base map tile layer is selected by the user via the sidebar dropdown
+        m = Map(
+            center=(20, 0),
+            zoom=2,
+            basemap=BASEMAP_OPTIONS[input.basemap()],
+            layout={"height": "450px"},
+        )
+        # TEST: strip the tile underlay to check if CDN loading causes gray-out on Posit
+        m.layers = ()
+
+        # Drop rows with missing coordinates and clamp to valid lat/lon ranges
         pts = map_points_df()
 
-        # Swap basemap tile layer if the user changed it
-        new_basemap = BASEMAP_OPTIONS[input.basemap()]
-        old_tiles = [l for l in _m.layers if isinstance(l, TileLayer)]
-        new_tile = TileLayer(**new_basemap)
-        if old_tiles:
-            _m.substitute_layer(old_tiles[0], new_tile)
-        else:
-            _m.add_layer(new_tile)
-
-        # Remove previously added data layers and controls, keeping built-ins
-        for layer in list(_m.layers):
-            if not isinstance(layer, TileLayer):
-                _m.remove_layer(layer)
-        for control in list(_m.controls):
-            if isinstance(control, (WidgetControl, LegendControl)):
-                _m.remove_control(control)
-
-        # Nothing to draw if the current filter selection has no data
+        # Return a plain empty map if the current filter selection has no data
         if pts.empty:
-            return
+            return m
 
         # --- H3 hexagonal binning ---
         # Resolution adapts to the number of points so the GeoJSON payload stays manageable:
@@ -667,7 +650,7 @@ def server(input, output, session):
         hover_html = widgets.HTML(
             "<div style='padding:6px 10px'>Hover over a cell</div>"
         )
-        _m.add_control(WidgetControl(widget=hover_html, position="topright"))
+        m.add_control(WidgetControl(widget=hover_html, position="topright"))
 
         # Add the hex bin layer; style_callback applies the per-feature color stored above
         geojson_layer = GeoJSON(
@@ -702,7 +685,7 @@ def server(input, output, session):
             selected_map_cell.set(feature["properties"]["cell"])
 
         geojson_layer.on_click(on_click)
-        _m.add_layer(geojson_layer)
+        m.add_layer(geojson_layer)
 
         # --- Legend ---
         # 5 evenly-spaced steps spanning the actual count range in the current filtered data
@@ -713,9 +696,11 @@ def server(input, output, session):
             )
             for i, label in enumerate(legend_steps)
         }
-        _m.add_control(
+        m.add_control(
             LegendControl(legend_colors, title="Observations", position="bottomleft")
         )
+
+        return m
 
     # reset button
     @reactive.effect
