@@ -1,12 +1,10 @@
 from shiny import App, ui, reactive
 from shinywidgets import render_widget, output_widget
-from ipyleaflet import Map, GeoJSON, WidgetControl
-import ipywidgets as widgets
+from ipyleaflet import Map, Polygon
 import h3
 import numpy as np
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
-import pandas as pd
 import ibis
 import os
 from ibis import _
@@ -15,91 +13,37 @@ PARQUET_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "processed"
 con = ibis.duckdb.connect()
 beetle_df = con.read_parquet(PARQUET_PATH)
 
-_meta = beetle_df.aggregate(year_min=beetle_df["year"].min(), year_max=beetle_df["year"].max()).execute()
-YEAR_MIN = int(_meta["year_min"].iloc[0])
-YEAR_MAX = int(_meta["year_max"].iloc[0])
+# --- Pre-processing at startup (data only, no widgets) ---
 
-
-def add_h3_cells(data: pd.DataFrame, resolution: int) -> pd.DataFrame:
-    data = data.copy()
-    latlng_to_cell = np.vectorize(lambda lat, lng: h3.latlng_to_cell(lat, lng, resolution))
-    data["cell"] = latlng_to_cell(data["decimalLatitude"].values, data["decimalLongitude"].values)
-    return data
-
-
-def query_pts(year_min, year_max) -> pd.DataFrame:
-    return (
-        beetle_df
-        .filter(_.year.between(year_min, year_max))
-        .select(["decimalLatitude", "decimalLongitude", "stateProvince"])
-        .filter(
-            _.decimalLatitude.notnull()
-            & _.decimalLongitude.notnull()
-            & _.decimalLatitude.between(-90, 90)
-            & _.decimalLongitude.between(-180, 180)
-        )
-        .execute()
+pts_all = (
+    beetle_df
+    .select(["decimalLatitude", "decimalLongitude", "year"])
+    .filter(
+        _.decimalLatitude.notnull()
+        & _.decimalLongitude.notnull()
+        & _.decimalLatitude.between(-90, 90)
+        & _.decimalLongitude.between(-180, 180)
+        & _.year.notnull()
     )
+    .execute()
+)
 
+YEAR_MIN = int(pts_all["year"].min())
+YEAR_MAX = int(pts_all["year"].max())
 
-def build_geojson_layer(pts: pd.DataFrame, hover_html: widgets.HTML) -> GeoJSON:
-    resolution = 2 if len(pts) > 5_000 else 3
-    pts = add_h3_cells(pts, resolution)
-    counts = pts["cell"].value_counts()
-    top_locations = (
-        pts.dropna(subset=["stateProvince"])
-        .groupby(["cell", "stateProvince"])
-        .size()
-        .reset_index(name="n")
-        .sort_values("n", ascending=False)
-        .groupby("cell").head(5)
-        .groupby("cell")
-        .apply(lambda g: g[["stateProvince", "n"]].values.tolist())
-        .to_dict()
-    )
-    cmap = cm.get_cmap("plasma")
-    max_count = counts.max()
-    features = []
-    for cell, count in counts.items():
-        boundary = h3.cell_to_boundary(cell)
-        coords = [[lng, lat] for lat, lng in boundary]
-        coords.append(coords[0])
-        color = mcolors.to_hex(cmap(count / max_count))
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Polygon", "coordinates": [coords]},
-            "properties": {
-                "count": int(count),
-                "cell": cell,
-                "top_locations": [[str(name), int(n)] for name, n in top_locations.get(cell, [])],
-                "style": {"color": color, "fillColor": color, "fillOpacity": 0.7, "weight": 0.3},
-            },
-        })
+fn = np.vectorize(lambda lat, lng: h3.latlng_to_cell(lat, lng, 2))
+pts_all["cell"] = fn(pts_all["decimalLatitude"].values, pts_all["decimalLongitude"].values)
 
-    layer = GeoJSON(
-        data={"type": "FeatureCollection", "features": features},
-        style_callback=lambda f: f["properties"]["style"],
-        hover_style={"fillOpacity": 0.95, "weight": 1.5},
-    )
+agg = pts_all.groupby(["cell", "year"])["decimalLatitude"].count().reset_index(name="count")
 
-    def on_hover(feature, **kwargs):
-        props = feature["properties"]
-        rows = "".join(
-            f"<tr><td>{name}</td><td style='text-align:right;padding-left:12px'>{n:,}</td></tr>"
-            for name, n in props["top_locations"]
-        )
-        hover_html.value = f"""
-            <div style='padding:6px 10px;min-width:160px;background:white;border-radius:4px'>
-                <b>{props['count']:,} observations</b>
-                <table style='margin-top:4px;width:100%;font-size:0.9em'>
-                    <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
-                    {rows}
-                </table>
-            </div>
-        """
+# Pre-compute cell boundary coords (plain data, not widgets)
+cell_locations: dict[str, list] = {}
+for cell in agg["cell"].unique():
+    boundary = h3.cell_to_boundary(cell)  # [(lat, lng), ...]
+    cell_locations[cell] = [(lat, lng) for lat, lng in boundary]
 
-    layer.on_hover(on_hover)
-    return layer
+cmap = cm.get_cmap("plasma")
+print(f"[startup] {len(pts_all)} pts | {len(cell_locations)} cells")
 
 
 app_ui = ui.page_fluid(
@@ -110,44 +54,45 @@ app_ui = ui.page_fluid(
 
 def server(input, output, session):
     m = Map(center=(20, 0), zoom=2, layout={"height": "500px"})
-    hover_html = widgets.HTML("<div style='padding:6px 10px'>Hover over a cell</div>")
-    m.add_control(WidgetControl(widget=hover_html, position="topright"))
-    current_layer = [None]
-    initialized = [False]  # skip the initial fire of update_hex_layer
 
-    def swap_layer(year_min, year_max):
-        if current_layer[0] is not None:
-            m.remove_layer(current_layer[0])
-            current_layer[0] = None
-        pts = query_pts(year_min, year_max)
-        if pts.empty:
-            print(f"[swap_layer] no data for {year_min}-{year_max}")
-            return
-        try:
-            layer = build_geojson_layer(pts, hover_html)
-            m.add_layer(layer)
-            current_layer[0] = layer
-            print(f"[swap_layer] ok: {year_min}-{year_max}, {len(pts)} pts, {len(m.layers)} layers")
-        except Exception as e:
-            print(f"[swap_layer] ERROR: {e}")
-            import traceback; traceback.print_exc()
+    # Create Polygon widgets inside the session, add all to m once
+    cell_polygons: dict[str, Polygon] = {}
+    for cell, locations in cell_locations.items():
+        poly = Polygon(locations=locations, color="#000", fill_color="#000", fill_opacity=0.0, weight=0)
+        m.add_layer(poly)
+        cell_polygons[cell] = poly
+
+    def update_polygons(year_min, year_max):
+        counts = (
+            agg.loc[agg["year"].between(year_min, year_max)]
+            .groupby("cell")["count"].sum()
+        )
+        max_count = counts.max() if not counts.empty else 1
+        visible = 0
+        for cell, poly in cell_polygons.items():
+            if cell in counts.index:
+                color = mcolors.to_hex(cmap(counts[cell] / max_count))
+                poly.color = color
+                poly.fill_color = color
+                poly.fill_opacity = 0.7
+                poly.weight = 1
+                visible += 1
+            else:
+                poly.fill_opacity = 0.0
+                poly.weight = 0
+        print(f"[update_polygons] {year_min}-{year_max}: {visible} visible cells")
+
+    update_polygons(YEAR_MIN, YEAR_MAX)
 
     @render_widget
     def map():
-        with reactive.isolate():
-            year_min, year_max = input.year_range()
-        swap_layer(year_min, year_max)
         return m
 
     @reactive.effect
     @reactive.event(input.year_range)
     def update_hex_layer():
-        if not initialized[0]:
-            initialized[0] = True
-            return  # skip the initial fire — render_widget already added the layer
         year_min, year_max = input.year_range()
-        print(f"[update_hex_layer] {year_min}-{year_max}")
-        swap_layer(year_min, year_max)
+        update_polygons(year_min, year_max)
 
 
 app = App(app_ui, server)
