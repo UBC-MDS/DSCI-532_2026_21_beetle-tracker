@@ -40,5 +40,13 @@ Before you make a substantial pull request, you should always file an issue and 
 Please note that this project follows a [Code of Conduct](CODE_OF_CONDUCT.md) and by contributing to or otherwise participating in this project you agree to abide by its terms.
 
 
+## M3 Retrospective & M4 Collaboration Norms
+
+Based on feedback from the teaching team and LLM-assisted code review, we identified opportunities to improve team collaboration going into Milestone 4. One key area was work distribution. In M3, contributions were uneven, so for M4 we made a deliberate effort to ensure every team member had equal opportunity to contribute to the codebase. We also received feedback that some PRs were being merged without sufficient review, so in M4 we adopted a norm of requiring at least one other team member to review a PR before it is merged.
+
+To better document our process, we shifted toward more atomic issues and PRs, making it easier to track individual contributions and decisions. We also recognized that our changelogs needed improvement, and for M4 we committed to writing more thorough and detailed changelogs with each release.
+
+Peer reviews from M3 also highlighted that the motivation behind our project was not clearly communicated, and that the README lacked sufficient detail for new contributors to get started. For M4 we addressed this by adding a clear project motivation to both the README and the app's About section, and by expanding the setup and usage instructions to ensure anyone can follow them.
+
 ## Attribution
 These contributing guidelines were adapted from the [dplyr contributing guidelines](https://github.com/tidyverse/dplyr/blob/main/.github/CONTRIBUTING.md).
