@@ -46,5 +46,7 @@ Based on feedback from the teaching team and LLM-assisted code review, we identi
 
 To better document our process, we shifted toward more atomic issues and PRs, making it easier to track individual contributions and decisions. We also recognized that our changelogs needed improvement, and for M4 we committed to writing more thorough and detailed changelogs with each release.
 
+Peer reviews from M3 also highlighted that the motivation behind our project was not clearly communicated, and that the README lacked sufficient detail for new contributors to get started. For M4 we addressed this by adding a clear project motivation to both the README and the app's About section, and by expanding the setup and usage instructions to ensure anyone can follow them.
+
 ## Attribution
 These contributing guidelines were adapted from the [dplyr contributing guidelines](https://github.com/tidyverse/dplyr/blob/main/.github/CONTRIBUTING.md).
