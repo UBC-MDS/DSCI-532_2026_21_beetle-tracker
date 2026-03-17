@@ -72,8 +72,7 @@ df_full = beetle_df.execute()
 # Pre-compute H3 cell boundaries at startup (resolution 2) so the server
 # can create Polygon widgets once and only mutate their properties reactively.
 _pts_startup = (
-    beetle_df
-    .select(["decimalLatitude", "decimalLongitude"])
+    beetle_df.select(["decimalLatitude", "decimalLongitude"])
     .filter(
         _.decimalLatitude.notnull()
         & _.decimalLongitude.notnull()
@@ -93,7 +92,6 @@ for _cell in _pts_startup["cell"].unique():
     CELL_LOCATIONS[_cell] = [(lat, lng) for lat, lng in _boundary]
 
 
-
 # Reuse the same H3 cell assignment logic for both drawing and filtering map data.
 def add_h3_cells(data: pd.DataFrame, resolution: int) -> pd.DataFrame:
     data = data.copy()
@@ -104,6 +102,7 @@ def add_h3_cells(data: pd.DataFrame, resolution: int) -> pd.DataFrame:
         data["decimalLatitude"].values, data["decimalLongitude"].values
     )
     return data
+
 
 # Client selection priority:
 #   1. GITHUB_PAT        -> GitHub Models (gpt-4o-mini)
@@ -276,7 +275,13 @@ app_ui = ui.page_navbar(
         .card { background-color: #f1f8e9; }
         .card-header { background-color: #a5d6a7; color: #1b5e20; }
         .value-box { background-color: #c8e6c9 !important; }
-    """
+        .bslib-sidebar-layout > .sidebar {
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+            position: sticky;
+            top: 0;
+        }
+        """
     ),
 )
 
@@ -316,7 +321,9 @@ def server(input, output, session):
                 .add_params(nearest)
             )
             html = (line + points).properties(width="container", height=300).to_html()
-            return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
+            return ui.tags.iframe(
+                srcdoc=html, width="100%", height="320px", style="border:none"
+            )
 
         @render.ui
         def ai_plot_basis():
@@ -336,7 +343,9 @@ def server(input, output, session):
                 .properties(width="container", height=350)
                 .to_html()
             )
-            return ui.tags.iframe(srcdoc=html, width="100%", height="370px", style="border:none")
+            return ui.tags.iframe(
+                srcdoc=html, width="100%", height="370px", style="border:none"
+            )
 
     @reactive.calc
     def filtered_expr():
@@ -384,7 +393,9 @@ def server(input, output, session):
         ].drop_duplicates()
         if selected_points.empty:
             return data.iloc[0:0]
-        return data.merge(selected_points, on=["decimalLatitude", "decimalLongitude"], how="inner")
+        return data.merge(
+            selected_points, on=["decimalLatitude", "decimalLongitude"], how="inner"
+        )
 
     # Value box: count of rows in the filtered dataset
     @render.ui
@@ -445,7 +456,9 @@ def server(input, output, session):
         )
 
         html = (line + points).properties(width="container", height=300).to_html()
-        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
+        return ui.tags.iframe(
+            srcdoc=html, width="100%", height="320px", style="border:none"
+        )
 
     # Pie chart: share of each basisOfRecord category in the filtered dataset
     @render.ui
@@ -465,7 +478,9 @@ def server(input, output, session):
             .properties(width="container", height=350)
             .to_html()
         )
-        return ui.tags.iframe(srcdoc=html, width="100%", height="370px", style="border:none")
+        return ui.tags.iframe(
+            srcdoc=html, width="100%", height="370px", style="border:none"
+        )
 
     # Bar chart: top 10 rights holders
     @render.ui
@@ -485,7 +500,9 @@ def server(input, output, session):
             .properties(width="container", height=300)
             .to_html()
         )
-        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
+        return ui.tags.iframe(
+            srcdoc=html, width="100%", height="320px", style="border:none"
+        )
 
     @render.ui
     def plot_monthly():
@@ -540,14 +557,20 @@ def server(input, output, session):
             .properties(width="container", height=300)
             .to_html()
         )
-        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
+        return ui.tags.iframe(
+            srcdoc=html, width="100%", height="320px", style="border:none"
+        )
 
     # Create the map once per session. A single GeoJSON layer is updated atomically
     # on each filter change instead of mutating hundreds of individual Polygon widgets.
     _m = Map(
         center=(20, 0),
         zoom=2,
-        basemap={"url": "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", "max_zoom": 19, "attribution": "CartoDB Positron"},
+        basemap={
+            "url": "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+            "max_zoom": 19,
+            "attribution": "CartoDB Positron",
+        },
         layout={"height": "450px"},
     )
     _geojson = GeoJSON(
@@ -564,7 +587,7 @@ def server(input, output, session):
     _hover_html = widgets.HTML(
         '<div style="padding:6px 10px;background:white;border-radius:4px;'
         'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
-        'Hover over a cell</div>'
+        "Hover over a cell</div>"
     )
     _m.add_control(WidgetControl(widget=_hover_html, position="topright"))
 
@@ -601,21 +624,25 @@ def server(input, output, session):
             coords.append(coords[0])
             color = mcolors.to_hex(cmap(count / max_count))
             selected = cell == current_cell
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "Polygon", "coordinates": [coords]},
-                "properties": {
-                    "count": int(count),
-                    "cell": cell,
-                    "top_locations": [[str(n), int(c)] for n, c in top_locations.get(cell, [])],
-                    "style": {
-                        "color": "#000" if selected else color,
-                        "fillColor": color,
-                        "fillOpacity": 0.95 if selected else 0.7,
-                        "weight": 3 if selected else 1,
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Polygon", "coordinates": [coords]},
+                    "properties": {
+                        "count": int(count),
+                        "cell": cell,
+                        "top_locations": [
+                            [str(n), int(c)] for n, c in top_locations.get(cell, [])
+                        ],
+                        "style": {
+                            "color": "#000" if selected else color,
+                            "fillColor": color,
+                            "fillOpacity": 0.95 if selected else 0.7,
+                            "weight": 3 if selected else 1,
+                        },
                     },
-                },
-            })
+                }
+            )
         _geojson.data = {"type": "FeatureCollection", "features": features}
 
         legend_steps = ["Very Low", "Low", "Medium", "High", "Very High"]
@@ -636,13 +663,13 @@ def server(input, output, session):
     _DEFAULT_HOVER = (
         '<div style="padding:6px 10px;background:white;border-radius:4px;'
         'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
-        'Hover over a cell</div>'
+        "Hover over a cell</div>"
     )
 
     def _on_hover(feature, **kwargs):
         props = feature["properties"]
         rows = "".join(
-            f'<tr><td>{name}</td>'
+            f"<tr><td>{name}</td>"
             f'<td style="text-align:right;padding-left:12px">{n:,}</td></tr>'
             for name, n in props["top_locations"]
         )
@@ -652,9 +679,9 @@ def server(input, output, session):
             f'<b>{props["count"]:,} observations</b>'
             f'<table style="margin-top:4px;width:100%">'
             f'<tr><th style="text-align:left">Location</th><th>Count</th></tr>'
-            f'{rows}</table>'
+            f"{rows}</table>"
             f'<div style="color:#888;margin-top:4px">Showing top 5 locations only</div>'
-            f'</div>'
+            f"</div>"
         )
 
     def _on_geojson_msg(widget, content, buffers):
@@ -680,7 +707,9 @@ def server(input, output, session):
     def map_selection_status():
         selected_cell = selected_map_cell()
         if selected_cell is None:
-            return ui.p("Click a cell to filter the dashboard.", class_="small mt-2 mb-0")
+            return ui.p(
+                "Click a cell to filter the dashboard.", class_="small mt-2 mb-0"
+            )
         count = len(filtered_df())
         return ui.div(
             ui.p("Map area selected", class_="fw-bold mt-2 mb-1"),
