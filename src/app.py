@@ -1,8 +1,8 @@
 from shiny import App, ui, reactive, render
-from shinywidgets import render_widget, output_widget, render_altair
+from shinywidgets import render_widget, output_widget
 from querychat import QueryChat
 from chatlas import ChatAnthropic, ChatGithub
-from ipyleaflet import Map, basemaps, GeoJSON, LegendControl, WidgetControl
+from ipyleaflet import Map, GeoJSON, WidgetControl
 import ipywidgets as widgets
 import h3
 import numpy as np
@@ -69,14 +69,29 @@ BASIS_OF_RECORD = ["All"] + (
 # place we pull the whole dataset into RAM
 df_full = beetle_df.execute()
 
-# Available map underlays; keys are displayed in the sidebar dropdown
-BASEMAP_OPTIONS = {
-    "CartoDB Positron": basemaps.CartoDB.Positron,  # clean light gray, minimal labels
-    "CartoDB Dark Matter": basemaps.CartoDB.DarkMatter,  # dark version of Positron
-    "Esri Gray Canvas": basemaps.Esri.WorldGrayCanvas,  # very minimal, nearly label-free
-    "Esri Topo": basemaps.Esri.WorldTopoMap,  # terrain and topographic detail
-    "Satellite": basemaps.Esri.WorldImagery,  # aerial/satellite imagery
-}
+# Pre-compute H3 cell boundaries at startup (resolution 2) so the server
+# can create Polygon widgets once and only mutate their properties reactively.
+_pts_startup = (
+    beetle_df
+    .select(["decimalLatitude", "decimalLongitude"])
+    .filter(
+        _.decimalLatitude.notnull()
+        & _.decimalLongitude.notnull()
+        & _.decimalLatitude.between(-90, 90)
+        & _.decimalLongitude.between(-180, 180)
+    )
+    .execute()
+)
+_fn = np.vectorize(lambda lat, lng: h3.latlng_to_cell(lat, lng, 2))
+_pts_startup["cell"] = _fn(
+    _pts_startup["decimalLatitude"].values,
+    _pts_startup["decimalLongitude"].values,
+)
+CELL_LOCATIONS: dict = {}
+for _cell in _pts_startup["cell"].unique():
+    _boundary = h3.cell_to_boundary(_cell)
+    CELL_LOCATIONS[_cell] = [(lat, lng) for lat, lng in _boundary]
+
 
 
 # Reuse the same H3 cell assignment logic for both drawing and filtering map data.
@@ -146,20 +161,12 @@ app_ui = ui.page_navbar(
                     label="Reset Filters",
                     class_="btn-warning w-100 mt-2",
                 ),
-                # Clear any hex clicked on the map without resetting the other sidebar filters.
                 ui.input_action_button(
                     id="clear_map_selection",
                     label="Clear Map Selection",
                     class_="btn-outline-secondary w-100 mt-2",
                 ),
-                # Show whether a map-driven filter is currently active.
                 ui.output_ui("map_selection_status"),
-                ui.input_select(
-                    id="basemap",
-                    label="Map Underlay",
-                    choices=list(BASEMAP_OPTIONS.keys()),
-                    selected="Esri Gray Canvas",
-                ),
                 ui.input_select(
                     id="colormap",
                     label="Map Color Scale",
@@ -191,12 +198,12 @@ app_ui = ui.page_navbar(
                     ui.layout_columns(
                         ui.card(
                             ui.card_header("Occurrences Over Time"),
-                            output_widget("plot_timeseries"),
+                            ui.output_ui("plot_timeseries"),
                             full_screen=True,
                         ),
                         ui.card(
                             ui.card_header("Basis of Record"),
-                            output_widget("plot_basis"),
+                            ui.output_ui("plot_basis"),
                             full_screen=True,
                         ),
                         col_widths=[6, 6],
@@ -204,12 +211,12 @@ app_ui = ui.page_navbar(
                     ui.layout_columns(
                         ui.card(
                             ui.card_header("Top Rights Holders"),
-                            output_widget("plot_rights_holder"),
+                            ui.output_ui("plot_rights_holder"),
                             full_screen=True,
                         ),
                         ui.card(
                             ui.card_header("Seasonal Observations by Month"),
-                            output_widget("plot_monthly"),
+                            ui.output_ui("plot_monthly"),
                             full_screen=True,
                         ),
                         col_widths=[6, 6],
@@ -236,11 +243,11 @@ app_ui = ui.page_navbar(
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Occurrences Over Time (AI Filtered)"),
-                    output_widget("ai_plot_timeseries"),
+                    ui.output_ui("ai_plot_timeseries"),
                 ),
                 ui.card(
                     ui.card_header("Basis of Record (AI Filtered)"),
-                    output_widget("ai_plot_basis"),
+                    ui.output_ui("ai_plot_basis"),
                 ),
                 col_widths=[6, 6],
             ),
@@ -275,7 +282,6 @@ app_ui = ui.page_navbar(
 
 
 def server(input, output, session):
-    # Store the currently selected H3 hex so map clicks can behave like an input.
     selected_map_cell = reactive.value(None)
 
     if qc is not None:
@@ -285,7 +291,7 @@ def server(input, output, session):
         def ai_table():
             return sv.df()
 
-        @render_altair
+        @render.ui
         def ai_plot_timeseries():
             counts = sv.df().groupby("year").size().reset_index(name="count")
             nearest = alt.selection_point(
@@ -309,14 +315,15 @@ def server(input, output, session):
                 )
                 .add_params(nearest)
             )
-            return (line + points).properties(width="container", height=300)
+            html = (line + points).properties(width="container", height=300).to_html()
+            return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
-        @render_altair
+        @render.ui
         def ai_plot_basis():
             counts = sv.df()["basisOfRecord"].dropna().value_counts().reset_index()
             counts.columns = ["basisOfRecord", "count"]
 
-            return (
+            html = (
                 alt.Chart(counts)
                 .mark_arc()
                 .encode(
@@ -327,7 +334,9 @@ def server(input, output, session):
                     tooltip=["basisOfRecord", "count"],
                 )
                 .properties(width="container", height=350)
+                .to_html()
             )
+            return ui.tags.iframe(srcdoc=html, width="100%", height="370px", style="border:none")
 
     @reactive.calc
     def filtered_expr():
@@ -343,14 +352,12 @@ def server(input, output, session):
 
         return expr
 
-    # Build the point dataset used to draw the map and map each point into an H3 cell.
+    # Build the point dataset used to draw the map; always resolution 2 to match CELL_LOCATIONS.
     @reactive.calc
     def map_points_df():
         pts = (
             filtered_expr()
-            .select(
-                ["decimalLatitude", "decimalLongitude", "stateProvince", "countryCode"]
-            )
+            .select(["decimalLatitude", "decimalLongitude", "stateProvince"])
             .filter(
                 _.decimalLatitude.notnull()
                 & _.decimalLongitude.notnull()
@@ -361,56 +368,23 @@ def server(input, output, session):
         )
         if pts.empty:
             return pts.assign(cell=pd.Series(dtype="object"))
+        return add_h3_cells(pts, 2)
 
-        resolution = 2 if len(pts) > 5_000 else 3
-        return add_h3_cells(pts, resolution)
-
-    # Apply the clicked map cell as an extra filter on top of the existing sidebar filters.
     @reactive.calc
     def filtered_df():
-        selected_cell = selected_map_cell()
         data = filtered_expr().execute()
-
+        selected_cell = selected_map_cell()
         if selected_cell is None:
             return data
-
         pts = map_points_df()
         if pts.empty:
             return data.iloc[0:0]
-
         selected_points = pts.loc[
             pts["cell"] == selected_cell, ["decimalLatitude", "decimalLongitude"]
         ].drop_duplicates()
         if selected_points.empty:
             return data.iloc[0:0]
-
-        return data.merge(
-            selected_points,
-            on=["decimalLatitude", "decimalLongitude"],
-            how="inner",
-        )
-
-    # Report the current map-selection filter state back to the sidebar.
-    @render.ui
-    def map_selection_status():
-        selected_cell = selected_map_cell()
-        if selected_cell is None:
-            return ui.div(
-                ui.p("Map interaction", class_="fw-bold mt-2 mb-1"),
-                ui.p(
-                    "Click a map area to filter the dashboard.",
-                    class_="small mb-0",
-                ),
-            )
-
-        selected_count = len(filtered_df())
-        return ui.div(
-            ui.p("Selected map area", class_="fw-bold mt-2 mb-1"),
-            ui.p(
-                f"Observations in this area: {selected_count:,}",
-                class_="small mb-0",
-            ),
-        )
+        return data.merge(selected_points, on=["decimalLatitude", "decimalLongitude"], how="inner")
 
     # Value box: count of rows in the filtered dataset
     @render.ui
@@ -432,7 +406,7 @@ def server(input, output, session):
         present = (filtered_df()["year"] == year_max).any()
         value = "Present" if present else "Not Detected"
         if selected_map_cell() is not None:
-            region_label = "Status in Selected Map Area"
+            region_label = "Status in Selected Area"
         elif input.region() == "All":
             region_label = "Status Worldwide"
         else:
@@ -442,7 +416,7 @@ def server(input, output, session):
         return ui.value_box(f"{region_label} as of {year_max}", value)
 
     # Line chart: number of observations per year across the filtered dataset
-    @render_altair
+    @render.ui
     def plot_timeseries():
         counts = filtered_df().groupby("year").size().reset_index(name="count")
         counts = counts.dropna(subset=["year"])
@@ -470,15 +444,15 @@ def server(input, output, session):
             .add_params(nearest)
         )
 
-        chart = (line + points).properties(width="container", height=300)
-        return chart
+        html = (line + points).properties(width="container", height=300).to_html()
+        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
     # Pie chart: share of each basisOfRecord category in the filtered dataset
-    @render_altair
+    @render.ui
     def plot_basis():
         counts = filtered_df()["basisOfRecord"].value_counts().reset_index()
         counts.columns = ["basisOfRecord", "count"]
-        return (
+        html = (
             alt.Chart(counts)
             .mark_arc()
             .encode(
@@ -489,16 +463,18 @@ def server(input, output, session):
                 tooltip=["basisOfRecord", "count"],
             )
             .properties(width="container", height=350)
+            .to_html()
         )
+        return ui.tags.iframe(srcdoc=html, width="100%", height="370px", style="border:none")
 
     # Bar chart: top 10 rights holders
-    @render_altair
+    @render.ui
     def plot_rights_holder():
         counts = (
             filtered_df()["rightsHolder"].dropna().value_counts().head(10).reset_index()
         )
         counts.columns = ["rightsHolder", "count"]
-        return (
+        html = (
             alt.Chart(counts)
             .mark_bar()
             .encode(
@@ -507,9 +483,11 @@ def server(input, output, session):
                 tooltip=["rightsHolder", "count"],
             )
             .properties(width="container", height=300)
+            .to_html()
         )
+        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
-    @render_altair
+    @render.ui
     def plot_monthly():
         monthly = (
             filtered_df()
@@ -543,7 +521,7 @@ def server(input, output, session):
         }
         monthly["month_name"] = monthly["month"].map(month_names)
 
-        return (
+        html = (
             alt.Chart(monthly)
             .mark_bar()
             .encode(
@@ -560,44 +538,48 @@ def server(input, output, session):
                 tooltip=["month_name", "count"],
             )
             .properties(width="container", height=300)
+            .to_html()
         )
+        return ui.tags.iframe(srcdoc=html, width="100%", height="320px", style="border:none")
 
-    # This map was coded with Claude's assistance. Claude suggested:
-    #  - Use H3 hexagonal binning over ipyleaflet's built-in Heatmap layer
-    #  - H3 provies the hexagon shapes
-    #  - We hand the shapes over to pyleaflet (no longer using heatmap)
-    #  - Use ipyleaflet's LegendControl to add an on-map legend
-    #  - GeoJSON used to represent hexagon shapes, which pyleaflet understands
-    # Map with H3 hex bins showing observation density.
-    # Reactively redraws whenever any sidebar filter or display option changes
-    @render_widget
-    def map():
-        # Read the selected cell so the active hex can be highlighted on redraw.
-        current_selected_cell = selected_map_cell()
+    # Create the map once per session. A single GeoJSON layer is updated atomically
+    # on each filter change instead of mutating hundreds of individual Polygon widgets.
+    _m = Map(
+        center=(20, 0),
+        zoom=2,
+        basemap={"url": "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", "max_zoom": 19, "attribution": "CartoDB Positron"},
+        layout={"height": "450px"},
+    )
+    _geojson = GeoJSON(
+        data={"type": "FeatureCollection", "features": []},
+        style_callback=lambda f: f["properties"]["style"],
+    )
+    _m.add_layer(_geojson)
 
-        # Base map tile layer is selected by the user via the sidebar dropdown
-        m = Map(
-            center=(20, 0),
-            zoom=2,
-            basemap=BASEMAP_OPTIONS[input.basemap()],
-            layout={"height": "450px"},
-        )
+    # HTML widget for the legend — added to the map once, content updated reactively
+    _legend_html = widgets.HTML("")
+    _m.add_control(WidgetControl(widget=_legend_html, position="bottomleft"))
 
-        # Drop rows with missing coordinates and clamp to valid lat/lon ranges
+    # Hover tooltip in the top-right corner — registered once, updated on hover events
+    _hover_html = widgets.HTML(
+        '<div style="padding:6px 10px;background:white;border-radius:4px;'
+        'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+        'Hover over a cell</div>'
+    )
+    _m.add_control(WidgetControl(widget=_hover_html, position="topright"))
+
+    def _update_polygons():
         pts = map_points_df()
+        current_cell = selected_map_cell()
 
-        # Return a plain empty map if the current filter selection has no data
         if pts.empty:
-            return m
-
-        # --- H3 hexagonal binning ---
-        # Resolution adapts to the number of points so the GeoJSON payload stays manageable:
-        # large datasets use resolution 2 (~5,882 global cells) to avoid browser timeouts,
-        # while smaller datasets use resolution 3 (~41,163 cells) for finer detail.
-        # Count observations per cell; most-frequent cells will receive the darkest color
+            _geojson.data = {"type": "FeatureCollection", "features": []}
+            _legend_html.value = ""
+            return
         counts = pts["cell"].value_counts()
+        max_count = counts.max()
+        cmap = cm.get_cmap(input.colormap())
 
-        # Top 5 stateProvinces by count within each cell for the hover tooltip
         top_locations = (
             pts.dropna(subset=["stateProvince"])
             .groupby(["cell", "stateProvince"])
@@ -611,94 +593,99 @@ def server(input, output, session):
             .to_dict()
         )
 
-        # Colormap is selected by the user; count is normalised to [0, 1] against the max
-        cmap = cm.get_cmap(input.colormap())
-        max_count = counts.max()
-
-        # Build a GeoJSON feature for each occupied cell
         features = []
         for cell, count in counts.items():
-            # h3.cell_to_boundary returns vertices as (lat, lng); GeoJSON expects [lng, lat]
-            boundary = h3.cell_to_boundary(cell)
-            coords = [[lng, lat] for lat, lng in boundary]
-            coords.append(coords[0])  # close the polygon ring
+            if cell not in CELL_LOCATIONS:
+                continue
+            coords = [[lng, lat] for lat, lng in CELL_LOCATIONS[cell]]
+            coords.append(coords[0])
             color = mcolors.to_hex(cmap(count / max_count))
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": {"type": "Polygon", "coordinates": [coords]},
-                    "properties": {
-                        "count": int(count),
-                        "cell": cell,
-                        "top_locations": [
-                            [str(name), int(n)]
-                            for name, n in top_locations.get(cell, [])
-                        ],
-                        "style": {
-                            "color": color,  # border color
-                            "fillColor": color,  # fill color
-                            "fillOpacity": 0.95 if cell == current_selected_cell else 0.7,
-                            "weight": 2 if cell == current_selected_cell else 0.3,
-                        },
+            selected = cell == current_cell
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [coords]},
+                "properties": {
+                    "count": int(count),
+                    "cell": cell,
+                    "top_locations": [[str(n), int(c)] for n, c in top_locations.get(cell, [])],
+                    "style": {
+                        "color": "#000" if selected else color,
+                        "fillColor": color,
+                        "fillOpacity": 0.95 if selected else 0.7,
+                        "weight": 3 if selected else 1,
                     },
-                }
-            )
+                },
+            })
+        _geojson.data = {"type": "FeatureCollection", "features": features}
 
-        # Hover info box in the top-right corner
-        hover_html = widgets.HTML(
-            "<div style='padding:6px 10px'>Hover over a cell</div>"
-        )
-        m.add_control(WidgetControl(widget=hover_html, position="topright"))
-
-        # Add the hex bin layer; style_callback applies the per-feature color stored above
-        geojson_layer = GeoJSON(
-            data={"type": "FeatureCollection", "features": features},
-            style_callback=lambda f: f["properties"]["style"],
-            hover_style={"fillOpacity": 0.95, "weight": 1.5},
-        )
-
-        def on_hover(feature, **kwargs):
-            props = feature["properties"]
-            rows = "".join(
-                f"<tr><td>{name}</td><td style='text-align:right;padding-left:12px'>{n:,}</td></tr>"
-                for name, n in props["top_locations"]
-            )
-            hover_html.value = f"""
-                <div style='padding:6px 10px;min-width:160px;background:white;border-radius:4px'>
-                    <b>{props['count']:,} observations</b>
-                    <table style='margin-top:4px;width:100%;font-size:0.9em'>
-                        <tr><th style='text-align:left'>Location</th><th>Count</th></tr>
-                        {rows}
-                    </table>
-                    <div style='font-size:0.8em;color:#888;margin-top:4px'>Showing up to 5 named locations</div>
-                </div>
-            """
-
-        geojson_layer.on_hover(on_hover)
-
-        # Turn a clicked hex into a reactive filter value for the rest of the app.
-        def on_click(event=None, feature=None, **kwargs):
-            if feature is None:
-                return
-            selected_map_cell.set(feature["properties"]["cell"])
-
-        geojson_layer.on_click(on_click)
-        m.add_layer(geojson_layer)
-
-        # --- Legend ---
-        # 5 evenly-spaced steps spanning the actual count range in the current filtered data
         legend_steps = ["Very Low", "Low", "Medium", "High", "Very High"]
-        legend_colors = {
-            f"{label} ({max(1, round(max_count * i / 4)):,})": mcolors.to_hex(
-                cmap(i / 4)
-            )
+        step_values = [max(1, round(max_count * i / 4)) for i in range(5)]
+        items = "".join(
+            f'<div style="display:flex;align-items:center;margin:2px 0">'
+            f'<span style="width:14px;height:14px;background:{mcolors.to_hex(cmap(i/4))};'
+            f'display:inline-block;margin-right:6px;border-radius:2px"></span>'
+            f'<span>{label} ({step_values[i]:,}{"–"+f"{step_values[i+1]:,}" if i < 4 else ""})</span></div>'
             for i, label in enumerate(legend_steps)
-        }
-        m.add_control(
-            LegendControl(legend_colors, title="Observations", position="bottomleft")
+        )
+        _legend_html.value = (
+            f'<div style="background:white;padding:8px 10px;border-radius:4px;'
+            f'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+            f'<b style="display:block;margin-bottom:4px">Observations</b>{items}</div>'
         )
 
-        return m
+    _DEFAULT_HOVER = (
+        '<div style="padding:6px 10px;background:white;border-radius:4px;'
+        'font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+        'Hover over a cell</div>'
+    )
+
+    def _on_hover(feature, **kwargs):
+        props = feature["properties"]
+        rows = "".join(
+            f'<tr><td>{name}</td>'
+            f'<td style="text-align:right;padding-left:12px">{n:,}</td></tr>'
+            for name, n in props["top_locations"]
+        )
+        _hover_html.value = (
+            f'<div style="padding:6px 10px;min-width:160px;background:white;'
+            f'border-radius:4px;font-size:0.82em;box-shadow:0 1px 4px rgba(0,0,0,0.25)">'
+            f'<b>{props["count"]:,} observations</b>'
+            f'<table style="margin-top:4px;width:100%">'
+            f'<tr><th style="text-align:left">Location</th><th>Count</th></tr>'
+            f'{rows}</table>'
+            f'<div style="color:#888;margin-top:4px">Showing top 5 locations only</div>'
+            f'</div>'
+        )
+
+    def _on_geojson_msg(widget, content, buffers):
+        if content.get("type") == "mouseout":
+            _hover_html.value = _DEFAULT_HOVER
+
+    def _on_click(feature, **kwargs):
+        selected_map_cell.set(feature["properties"]["cell"])
+
+    _geojson.on_hover(_on_hover)
+    _geojson.on_msg(_on_geojson_msg)
+    _geojson.on_click(_on_click)
+
+    @render_widget
+    def map():
+        return _m
+
+    @reactive.effect
+    def _on_filters_changed():
+        _update_polygons()
+
+    @render.ui
+    def map_selection_status():
+        selected_cell = selected_map_cell()
+        if selected_cell is None:
+            return ui.p("Click a cell to filter the dashboard.", class_="small mt-2 mb-0")
+        count = len(filtered_df())
+        return ui.div(
+            ui.p("Map area selected", class_="fw-bold mt-2 mb-1"),
+            ui.p(f"{count:,} observations in this area.", class_="small mb-0"),
+        )
 
     # reset button
     @reactive.effect
@@ -709,15 +696,13 @@ def server(input, output, session):
         ui.update_radio_buttons("basis_record", selected="All")
         selected_map_cell.set(None)
 
-    # Let the user drop only the map-driven filter while keeping the sidebar choices.
     @reactive.effect
     @reactive.event(input.clear_map_selection)
     def clear_map_selection():
         selected_map_cell.set(None)
 
-    # Clear any stale map selection when the main filters change.
     @reactive.effect
-    def clear_stale_map_selection():
+    def _clear_stale_map_selection():
         input.region()
         input.basis_record()
         input.year_range()

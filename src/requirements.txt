@@ -5,7 +5,7 @@ numpy
 ipyleaflet
 ipywidgets
 matplotlib
-altair
+altair<6
 h3
 querychat
 ibis-framework[duckdb]
