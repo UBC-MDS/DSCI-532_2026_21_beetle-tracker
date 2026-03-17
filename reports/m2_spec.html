@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.26">
+<meta name="generator" content="quarto-1.8.21">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -31,7 +31,7 @@ ul.task-list li input[type="checkbox"] {
 <script src="m2_spec_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="m2_spec_files/libs/quarto-html/anchor.min.js"></script>
 <link href="m2_spec_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="m2_spec_files/libs/quarto-html/quarto-syntax-highlighting-587c61ba64f3a5504c4d52d930310e48.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="m2_spec_files/libs/quarto-html/quarto-syntax-highlighting-ea1d7ac60288e0f1efdbc993fd8432ae.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="m2_spec_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="m2_spec_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="m2_spec_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
@@ -76,9 +76,9 @@ ul.task-list li input[type="checkbox"] {
 </tr>
 <tr class="even">
 <td>2</td>
-<td>When I … I want to … so I can …</td>
-<td></td>
-<td></td>
+<td>When I want to visualize all the observations on the map, I will first filter the data by changing the filter selection on the left sidebar (time range, region, etc.), so the map will update with a marker or heatmap for all the observations.</td>
+<td>Implemented</td>
+<td>Use H3 library for hex cell calculations</td>
 </tr>
 <tr class="odd">
 <td>3</td>
@@ -94,27 +94,33 @@ ul.task-list li input[type="checkbox"] {
 </tr>
 <tr class="odd">
 <td>5</td>
-<td>When I … I want to … so I can …</td>
-<td></td>
+<td>When I am assessing risk and developing prevention methods, I want to see the spread of the beetle from first observation to a widespread established population so I can plean when prevention strategies should be implemented.</td>
+<td>implemented</td>
 <td></td>
 </tr>
 <tr class="even">
 <td>6</td>
-<td>When I … I want to … so I can …</td>
-<td></td>
+<td>When I am curious about what regions are at risk, I want to visualize on the map along what latitudes infestations are present so I can assess if my region is at risk.</td>
+<td>implemented</td>
 <td></td>
 </tr>
 <tr class="odd">
 <td>7</td>
-<td>When I … I want to … so I can …</td>
-<td></td>
+<td>When I am reviewing the historical progression of beetle activity, I want to observe how observation density shifts geographically on the map as I adjust the year range, so I can understand whether the infestation is expanding into new areas or intensifying in established ones.</td>
+<td>Implemented</td>
 <td></td>
 </tr>
 <tr class="even">
 <td>8</td>
-<td>When I … I want to … so I can …</td>
+<td>When I am assessing the overall scale of beetle activity within a selected region and time period, I want the Total Observations indicator to update automatically with my filters, so I can quickly gauge the magnitude of activity without analyzing multiple charts.</td>
+<td>Implemented</td>
 <td></td>
-<td></td>
+</tr>
+<tr class="odd">
+<td>9</td>
+<td>When I click a selected area on the map, I want the rest of the dashboard to update to that area so I can explore observations more directly without relying only on sidebar filters.</td>
+<td>Implemented</td>
+<td>Map click filters dashboard outputs</td>
 </tr>
 </tbody>
 </table>
@@ -122,55 +128,246 @@ ul.task-list li input[type="checkbox"] {
 </section>
 <section id="component-inventory" class="level2">
 <h2 class="anchored" data-anchor-id="component-inventory">2.2 Component Inventory</h2>
+<section id="inputs" class="level3">
+<h3 class="anchored" data-anchor-id="inputs">Inputs</h3>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 26%">
-<col style="width: 32%">
+<col style="width: 5%">
+<col style="width: 28%">
+<col style="width: 42%">
+<col style="width: 9%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>ID</th>
+<th>Type</th>
+<th>Shiny widget</th>
+<th>Description</th>
+<th>Job story</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>year_range</code></td>
+<td>Input</td>
+<td><code>ui.input_slider()</code></td>
+<td>Dual-handle slider selecting a year range; bounds are derived from the dataset at startup</td>
+<td>#1, #5</td>
+</tr>
+<tr class="even">
+<td><code>region</code></td>
+<td>Input</td>
+<td><code>ui.input_selectize()</code></td>
+<td>Dropdown to filter by region; users see country names while filtering still uses the underlying <code>countryCode</code> values</td>
+<td>#2, #6</td>
+</tr>
+<tr class="odd">
+<td><code>basis_record</code></td>
+<td>Input</td>
+<td><code>ui.input_radio_buttons()</code></td>
+<td>Radio buttons to filter by <code>basisOfRecord</code>; choices include “All” plus each unique value in the data</td>
+<td>#2</td>
+</tr>
+<tr class="even">
+<td><code>clear_map_selection</code></td>
+<td>Input</td>
+<td><code>ui.input_action_button()</code></td>
+<td>Button that clears the currently selected map hex without resetting the other filters</td>
+<td>#9</td>
+</tr>
+<tr class="odd">
+<td><code>basemap</code></td>
+<td>Input</td>
+<td><code>ui.input_select()</code></td>
+<td>Dropdown to choose the map tile underlay (CartoDB Positron, CartoDB Dark Matter, Esri Gray Canvas, Esri Topo, Satellite)</td>
+<td>#2</td>
+</tr>
+<tr class="even">
+<td><code>colormap</code></td>
+<td>Input</td>
+<td><code>ui.input_select()</code></td>
+<td>Dropdown to choose the colour scale for hex-bin density (viridis, plasma, YlOrRd, Greens, Blues)</td>
+<td>#2</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="reactive-intermediary" class="level3">
+<h3 class="anchored" data-anchor-id="reactive-intermediary">Reactive intermediary</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 13%">
+<col style="width: 16%">
+<col style="width: 18%">
+<col style="width: 40%">
 <col style="width: 11%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>ID</th>
 <th>Type</th>
-<th>Shiny widget / renderer</th>
+<th>Shiny mechanism</th>
+<th>Depends on</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>selected_map_cell</code></td>
+<td>Reactive value</td>
+<td><code>reactive.value()</code></td>
+<td>map click, reset button, clear-map button, main filters</td>
+<td>Stores the currently selected H3 hex cell so the map can behave like an input</td>
+</tr>
+<tr class="even">
+<td><code>map_points_df</code></td>
+<td>Reactive calc</td>
+<td><code>@reactive.calc</code></td>
+<td><code>filtered_expr</code></td>
+<td>Builds the filtered coordinate dataset used to draw the map and assign H3 cells</td>
+</tr>
+<tr class="odd">
+<td><code>filtered_df</code></td>
+<td>Reactive calc</td>
+<td><code>@reactive.calc</code></td>
+<td><code>filtered_expr</code>, <code>selected_map_cell</code></td>
+<td>Applies the selected map hex as an additional filter on top of the main year/region/basis filters so all outputs can react to a clicked map area</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="outputs" class="level3">
+<h3 class="anchored" data-anchor-id="outputs">Outputs</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 7%">
+<col style="width: 18%">
+<col style="width: 40%">
+<col style="width: 10%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>ID</th>
+<th>Type</th>
+<th>Shiny renderer</th>
 <th>Depends on</th>
 <th>Job story</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td><code>input_year</code></td>
-<td>Input</td>
-<td><code>ui.input_slider()</code></td>
-<td>—</td>
+<td><code>vb_total_obs</code></td>
+<td>Output</td>
+<td><code>@render.ui</code></td>
+<td><code>filtered_df</code></td>
 <td>#1</td>
+</tr>
+<tr class="even">
+<td><code>vb_first_recorded</code></td>
+<td>Output</td>
+<td><code>@render.ui</code></td>
+<td><code>filtered_df</code></td>
+<td>#5</td>
+</tr>
+<tr class="odd">
+<td><code>vb_status</code></td>
+<td>Output</td>
+<td><code>@render.ui</code></td>
+<td><code>filtered_df</code>, <code>year_range</code>, <code>region</code>, <code>selected_map_cell</code></td>
+<td>#5, #6, #9</td>
+</tr>
+<tr class="even">
+<td><code>map</code></td>
+<td>Output</td>
+<td><code>@render_widget</code></td>
+<td><code>filtered_df</code>, <code>basemap</code>, <code>colormap</code></td>
+<td>#2, #6</td>
+</tr>
+<tr class="odd">
+<td><code>map_selection_status</code></td>
+<td>Output</td>
+<td><code>@render.ui</code></td>
+<td><code>selected_map_cell</code>, <code>filtered_df</code></td>
+<td>#9</td>
+</tr>
+<tr class="even">
+<td><code>plot_timeseries</code></td>
+<td>Output</td>
+<td><code>@render_altair</code></td>
+<td><code>filtered_df</code></td>
+<td>#1, #5</td>
+</tr>
+<tr class="odd">
+<td><code>plot_basis</code></td>
+<td>Output</td>
+<td><code>@render_altair</code></td>
+<td><code>filtered_df</code></td>
+<td>#2</td>
 </tr>
 <tr class="even">
 <td><code>plot_rights_holder</code></td>
 <td>Output</td>
-<td><code>render_altair</code></td>
-<td><code>input_year</code>, <code>input_region</code>, <code>input_basis_record</code></td>
+<td><code>@render_altair</code></td>
+<td><code>filtered_df</code></td>
 <td>#3</td>
 </tr>
 <tr class="odd">
 <td><code>plot_monthly</code></td>
 <td>Output</td>
-<td><code>render_altair</code></td>
-<td><code>input_year</code>, <code>input_region</code>, <code>input_basis_record</code></td>
+<td><code>@render_altair</code></td>
+<td><code>filtered_df</code></td>
 <td>#4</td>
 </tr>
 </tbody>
 </table>
 <hr>
 </section>
+</section>
 <section id="reactivity-diagram" class="level2">
 <h2 class="anchored" data-anchor-id="reactivity-diagram">2.3 Reactivity Diagram</h2>
+<p>The main sidebar filters (<code>year_range</code>, <code>region</code>, <code>basis_record</code>) feed into a base filtered query. The map is rendered from this filtered spatial dataset, and clicking a hexagon stores the selected H3 cell as a reactive value. That selected cell then feeds into <code>filtered_df</code>, which acts as the shared filtered dataset for the dashboard outputs. The <code>clear_map_selection</code> button and reset button both clear the selected map cell. The display inputs (<code>basemap</code>, <code>colormap</code>) still flow directly into the map widget only. <code>vb_status</code> also reads <code>year_range</code> directly to obtain the upper-bound year for its label.</p>
+<pre class="mermaid"><code>flowchart TD
+  A[/year_range/] --&gt; Q{{filtered_expr}}
+  B[/region/] --&gt; Q
+  C[/basis_record/] --&gt; Q
+  Q --&gt; M{{map_points_df}}
+  M --&gt; P3([map])
+  P3 --&gt; S{{selected_map_cell}}
+  S --&gt; F{{filtered_df}}
+  A --&gt; VB3
+  B --&gt; VB3
+  D[/basemap/] --&gt; P3
+  E[/colormap/] --&gt; P3
+  R[/clear_map_selection/] --&gt; S
+  F --&gt; VB1([vb_total_obs])
+  F --&gt; VB2([vb_first_recorded])
+  F --&gt; VB3([vb_status])
+  F --&gt; MS([map_selection_status])
+  F --&gt; P1([plot_timeseries])
+  F --&gt; P2([plot_basis])
+  F --&gt; P4([plot_rights_holder])
+  F --&gt; P5([plot_monthly])</code></pre>
 <hr>
 </section>
 <section id="calculation-details" class="level2">
 <h2 class="anchored" data-anchor-id="calculation-details">2.4 Calculation Details</h2>
+<section id="filtered_df" class="level3">
+<h3 class="anchored" data-anchor-id="filtered_df"><code>filtered_df</code></h3>
+<p><strong>Inputs it depends on:</strong> <code>filtered_expr</code>, <code>selected_map_cell</code></p>
+<p><strong>Transformation:</strong> First applies the main sidebar filters (year range, region, and basis of record) through the base filtered query. If no map hex is selected, the resulting filtered dataset is returned as-is. If a map hex is selected, the dataset is further restricted to records whose coordinates fall within the selected H3 cell. This allows the map to act as an input component and drive the rest of the dashboard outputs.</p>
+<p><strong>Outputs that consume it:</strong> <code>vb_total_obs</code>, <code>vb_first_recorded</code>, <code>vb_status</code>, <code>map_selection_status</code>, <code>plot_timeseries</code>, <code>plot_basis</code>, <code>plot_rights_holder</code>, <code>plot_monthly</code></p>
+</section>
+</section>
+<section id="complexity-enhancement" class="level2">
+<h2 class="anchored" data-anchor-id="complexity-enhancement">Complexity Enhancement</h2>
+<p>The dashboard includes two interaction enhancements beyond the original filtering controls:</p>
+<ol type="1">
+<li>A reset button that restores the sidebar filters to their default state.</li>
+<li>A map-click interaction that allows users to select an H3 hexagon and use it as an input-like filter for the rest of the dashboard.</li>
+</ol>
+<p>These enhancements improve usability by supporting faster exploration and more direct interaction with the spatial view.</p>
 </section>
 </section>
 
@@ -227,14 +424,13 @@ ul.task-list li input[type="checkbox"] {
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-      const outerScaffold = trigger.parentElement.cloneNode(true);
-      const codeEl = outerScaffold.querySelector('code');
-      for (const childEl of codeEl.children) {
-        if (isCodeAnnotation(childEl)) {
-          childEl.remove();
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
         }
-      }
-      return codeEl.innerText;
+        return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
